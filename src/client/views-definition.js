@@ -26,7 +26,10 @@ export const viewsDefinition = {
       const callId = String(event.data?.message?.source?.callId ?? '')
       if (!state.calls.has(callId)) return state
       const calls = new Map(state.calls)
-      calls.set(callId, { ...calls.get(callId), ok: event.data.message?.isError !== true })
+      // Only a result this plugin answered carries the presentationMeta marker;
+      // a same-named call another plugin's scoped tool ran stays undrawn.
+      const mine = event.data.message?.meta?.owner === 'dsh-deep-ui'
+      calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true })
       return { ...state, calls }
     }
     return state

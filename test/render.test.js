@@ -147,9 +147,12 @@ test('the Definition folds only successful show_view calls into turn data', () =
     { type: 'turn/start', seq: 1, data: { turn: 1 } },
     { type: 'tool/call', seq: 2, data: { turn: 1, step: 1, callId: 'c1', name: 'show_view', arguments: JSON.stringify({ title: 'Stats', view: METER }) } },
     { type: 'tool/call', seq: 3, data: { turn: 1, step: 1, callId: 'c2', name: 'pwsh', arguments: '{"cmd":"x"}' } },
-    { type: 'tool/result', seq: 4, data: { turn: 1, step: 1, message: { source: { callId: 'c1' } } } },
+    { type: 'tool/result', seq: 4, data: { turn: 1, step: 1, message: { source: { callId: 'c1' }, meta: { owner: 'dsh-deep-ui' } } } },
     { type: 'tool/call', seq: 5, data: { turn: 1, step: 1, callId: 'c3', name: 'show_view', arguments: JSON.stringify({ view: CHOICES }) } },
-    { type: 'tool/result', seq: 6, data: { turn: 1, step: 1, message: { source: { callId: 'c3' }, isError: true } } },
+    { type: 'tool/result', seq: 6, data: { turn: 1, step: 1, message: { source: { callId: 'c3' }, isError: true, meta: { owner: 'dsh-deep-ui' } } } },
+    // A show_view another plugin answered carries no marker: its call stays undrawn.
+    { type: 'tool/call', seq: 7, data: { turn: 1, step: 2, callId: 'c4', name: 'show_view', arguments: JSON.stringify({ view: METER }) } },
+    { type: 'tool/result', seq: 8, data: { turn: 1, step: 2, message: { source: { callId: 'c4' } } } },
   ]
   let context = { state: undefined }
   let state

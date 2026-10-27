@@ -10,26 +10,6 @@ import { call } from './api.js'
 
 const REPLY_HEAD = '{"kind":"answer_to_pending_view"'
 
-// Another plugin may register show_view in a session's agent scope — then its
-// cards are that plugin's to draw. Asked once per session, cached.
-const servesCache = new Map()
-const serves = (sessionId) => {
-  if (typeof sessionId !== 'string') return Promise.resolve(true)
-  if (!servesCache.has(sessionId)) {
-    servesCache.set(sessionId, call('serves', { sessionId }).then(value => value !== false).catch(() => true))
-  }
-  return servesCache.get(sessionId)
-}
-const useServes = (sessionId) => {
-  const [mine, setMine] = useState(true)
-  useEffect(() => {
-    let alive = true
-    serves(sessionId).then(value => { if (alive) setMine(value) })
-    return () => { alive = false }
-  }, [sessionId])
-  return mine
-}
-
 // The text of the user message that answered `callId`, or undefined. The reply
 // names the call at its top level, so the scan stays a cheap string check until
 // a candidate parses.
@@ -64,19 +44,17 @@ const SettledView = ({ replyText }) => {
 // revokes the card on the host — and after its own submit or dismiss, never on
 // a streamed chunk: the gate is the chat node count, a coarse value.
 const InteractiveView = ({ callId, sessionId, useConversation }) => {
-  const mine = useServes(sessionId)
   const order = useConversation?.(snapshot => snapshot?.views?.get?.('chat')?.order?.length ?? 0) ?? 0
   const replyText = useConversation?.(snapshot => findReplyText(snapshot, callId))
   const [record, setRecord] = useState(undefined)
   const [revision, setRevision] = useState(0)
   const [flying, setFlying] = useState(false)
   useEffect(() => {
-    if (typeof sessionId !== 'string' || replyText !== undefined || !mine) return undefined
+    if (typeof sessionId !== 'string' || replyText !== undefined) return undefined
     let alive = true
     call('pending', { sessionId }).then(value => { if (alive) setRecord(value) }).catch(() => { if (alive) setRecord(null) })
     return () => { alive = false }
-  }, [sessionId, order, replyText, revision, mine])
-  if (!mine) return null
+  }, [sessionId, order, replyText, revision])
   if (replyText !== undefined) return h(SettledView, { replyText })
   if (flying === 'gone' || record === undefined || record === null || record.callId !== callId) return null
   const run = (make) => {
@@ -90,9 +68,7 @@ const InteractiveView = ({ callId, sessionId, useConversation }) => {
 }
 
 const TailView = ({ call, sessionId, useConversation }) => {
-  const mine = useServes(sessionId)
   const shown = checkShownView(call.args?.title, call.args?.view)
-  if (!mine) return null
   if (shown.error !== undefined) return null
   // The same refusal rules the tool applied: a call that showed no card draws none.
   if (!shown.interactive && call.args?.await_reply === true) return null

@@ -2316,7 +2316,8 @@ var viewsDefinition = {
       const callId = String(event.data?.message?.source?.callId ?? "");
       if (!state.calls.has(callId)) return state;
       const calls = new Map(state.calls);
-      calls.set(callId, { ...calls.get(callId), ok: event.data.message?.isError !== true });
+      const mine = event.data.message?.meta?.owner === "dsh-deep-ui";
+      calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true });
       return { ...state, calls };
     }
     return state;
@@ -2357,27 +2358,6 @@ var call = async (op, payload, signal) => {
 // src/client/tail.js
 var import_react5 = require("react");
 var REPLY_HEAD = '{"kind":"answer_to_pending_view"';
-var servesCache = /* @__PURE__ */ new Map();
-var serves = (sessionId) => {
-  if (typeof sessionId !== "string") return Promise.resolve(true);
-  if (!servesCache.has(sessionId)) {
-    servesCache.set(sessionId, call("serves", { sessionId }).then((value) => value !== false).catch(() => true));
-  }
-  return servesCache.get(sessionId);
-};
-var useServes = (sessionId) => {
-  const [mine, setMine] = (0, import_react5.useState)(true);
-  (0, import_react5.useEffect)(() => {
-    let alive = true;
-    serves(sessionId).then((value) => {
-      if (alive) setMine(value);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [sessionId]);
-  return mine;
-};
 var findReplyText = (snapshot, callId) => {
   const chat = snapshot?.views?.get?.("chat");
   if (chat === void 0) return void 0;
@@ -2403,14 +2383,13 @@ var SettledView = ({ replyText }) => {
   return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: view.title ?? "", view: view.view, settled: true, answer }));
 };
 var InteractiveView = ({ callId, sessionId, useConversation }) => {
-  const mine = useServes(sessionId);
   const order = useConversation?.((snapshot) => snapshot?.views?.get?.("chat")?.order?.length ?? 0) ?? 0;
   const replyText = useConversation?.((snapshot) => findReplyText(snapshot, callId));
   const [record, setRecord] = (0, import_react5.useState)(void 0);
   const [revision, setRevision] = (0, import_react5.useState)(0);
   const [flying, setFlying] = (0, import_react5.useState)(false);
   (0, import_react5.useEffect)(() => {
-    if (typeof sessionId !== "string" || replyText !== void 0 || !mine) return void 0;
+    if (typeof sessionId !== "string" || replyText !== void 0) return void 0;
     let alive = true;
     call("pending", { sessionId }).then((value) => {
       if (alive) setRecord(value);
@@ -2420,8 +2399,7 @@ var InteractiveView = ({ callId, sessionId, useConversation }) => {
     return () => {
       alive = false;
     };
-  }, [sessionId, order, replyText, revision, mine]);
-  if (!mine) return null;
+  }, [sessionId, order, replyText, revision]);
   if (replyText !== void 0) return (0, import_react5.createElement)(SettledView, { replyText });
   if (flying === "gone" || record === void 0 || record === null || record.callId !== callId) return null;
   const run2 = (make) => {
@@ -2437,9 +2415,7 @@ var InteractiveView = ({ callId, sessionId, useConversation }) => {
   return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: record.title ?? "", view: record.view, onSubmit, onDismiss, busy: flying === true }));
 };
 var TailView = ({ call: call2, sessionId, useConversation }) => {
-  const mine = useServes(sessionId);
   const shown = checkShownView(call2.args?.title, call2.args?.view);
-  if (!mine) return null;
   if (shown.error !== void 0) return null;
   if (!shown.interactive && call2.args?.await_reply === true) return null;
   if (shown.interactive && call2.args?.await_reply === false) return null;

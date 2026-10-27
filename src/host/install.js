@@ -15,6 +15,9 @@ export const ROUTE = '/api/deep-ui'
 const output = {
   schema: { type: 'string' },
   render: (args, value) => [{ type: 'text', text: String(value) }],
+  // Marks the result so the client only draws the calls this plugin answered:
+  // a session where another plugin's scoped show_view ran has no marker.
+  presentationMeta: () => ({ owner: 'dsh-deep-ui' }),
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -87,18 +90,7 @@ export function install(ctx, config = {}) {
       switch (op) {
         case 'pending':
           return ok(sessionId === undefined ? null : (pending.get(sessionId) ?? null))
-        // Another plugin can register show_view in an agent's scope — then this
-        // session's cards are that plugin's to draw, not ours.
-        case 'serves': {
-          if (sessionId === undefined) return fail('No session', 'deep-ui/invalid')
-          try {
-            const resolved = await ctx.sessionController.resolveAgent(sessionId)
-            if (resolved.agent === undefined) return ok(true)
-            return ok(ctx.tools.get('show_view', resolved.agent) === showViewTool)
-          } catch {
-            return ok(true)
-          }
-        }
+
         case 'dismiss':
           if (sessionId === undefined) return fail('Nothing to dismiss', 'deep-ui/invalid')
           await pending.drop(sessionId)

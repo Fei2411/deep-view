@@ -37,6 +37,14 @@ function start() {
   return { ctx, emit, show, call, sent, failFlush(e) { flushError = e }, stop: async () => { rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
 }
 
+test('the tool output marks its results so the client draws only its own calls', async () => {
+  const { ctx, stop } = start()
+  try {
+    const tool = ctx.registeredTools.get('show_view')
+    assert.deepEqual(tool.output.presentationMeta({ view: {} }, 'The view is on screen.'), { owner: 'dsh-deep-ui' })
+  } finally { await stop() }
+})
+
 test('display-only view: valid returns on-screen text, no pending record', async () => {
   const t = start()
   const text = await t.show({ title: 'Hi', view: METER })
