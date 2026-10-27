@@ -41,6 +41,15 @@ jobs:
       - run: node scripts/build-client.mjs --check
       - run: node --import ./test/harness-resolve.mjs --test --test-timeout=120000 "test/*.test.js"
       - run: npm run lint
+
+  scan:
+    name: Leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       # Scan exactly the tracked files, as they would be published.
       - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
       - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
