@@ -72,7 +72,14 @@ export function install(ctx, config = {}) {
       return 'The view is on screen; the user\'s answer arrives as their next message.'
     },
   })
-  ctx.tools.register(showViewTool)
+  // An older ds-bot registers show_view globally too; duplicates in one layer
+  // throw, and an uncaught throw keeps the whole plugin from activating. Then
+  // Deep UI's tool stays off — its tail and replies only fold marked calls.
+  try {
+    ctx.tools.register(showViewTool)
+  } catch (error) {
+    ctx.logger?.warn('deep-ui: another plugin already provides show_view globally; Deep UI\'s tool is off. (%s)', error?.message ?? error)
+  }
 
   // Any user message or card answer admitted into a session drops its pending
   // view: the open card leaves the page without a reload.

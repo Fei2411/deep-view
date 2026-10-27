@@ -16,6 +16,8 @@ Add the package to the DSH profile's plugins (Desktop's plugin UI, or a `cordis.
 
 Then restart the session. `show_view` appears in every agent's tool list.
 
+Using it together with DS Bot needs a DS Bot version that scopes its own `show_view` per session; with an older one, Deep UI stays installed but its tool is off.
+
 ## What an agent can draw
 
 The `view` argument is one declarative component; `stack`/`row` lay out children.

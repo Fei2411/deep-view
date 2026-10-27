@@ -16,6 +16,8 @@ Deep UI 是一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 
 然后重开会话。每个 Agent 的工具列表里都会出现 `show_view`。
 
+与 DS Bot 一起用时，需要一个把自己的 `show_view` 改为按会话注册的 DS Bot 版本；旧版本下 Deep UI 仍会安装，但它的工具不会启用。
+
 ## Agent 能画什么
 
 `view` 参数是一个声明式组件；`stack`/`row` 负责子节点排版。

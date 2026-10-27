@@ -9,7 +9,7 @@ import { fakeContext } from './fake-ctx.js'
 const CHOICES = { type: 'options', id: 'pick', options: [{ label: 'A' }, { label: 'B' }] }
 const METER = { type: 'metric', label: 'Progress', value: '70%' }
 
-function start() {
+function start({ beforeApply } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'deep-ui-'))
   const ctx = fakeContext()
   const sent = []
@@ -24,6 +24,7 @@ function start() {
   ctx.agentsRegistry.map.set('a1', agent)
   let route
   ctx.connection.fetch.register = (options) => { route = options; return async () => {} }
+  beforeApply?.(ctx)
   apply(ctx, { home })
   let seq = 0
   const emit = (id, type, data) => {
@@ -36,6 +37,16 @@ function start() {
   }))).json()
   return { ctx, emit, show, call, sent, failFlush(e) { flushError = e }, stop: async () => { rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
 }
+
+test('a global show_view from another plugin warns instead of failing activation', async () => {
+  const { ctx, call, stop } = start({ beforeApply: fake => fake.tools.register({ name: 'show_view' }) })
+  try {
+    assert.equal(ctx.registeredTools.has('show_view'), true, 'the foreign tool stays registered')
+    assert.ok(ctx.warnings.some(line => line.includes('already provides show_view')), 'warned about the collision')
+    const result = await call('pending', { sessionId: 's1' })
+    assert.equal(result.ok, true, 'the rest of the plugin still works')
+  } finally { await stop() }
+})
 
 test('the tool output marks its results so the client draws only its own calls', async () => {
   const { ctx, stop } = start()
