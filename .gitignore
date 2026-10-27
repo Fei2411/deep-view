@@ -1,0 +1,3 @@
+node_modules/
+dev/harness/node_modules/
+.dsh-test-*/

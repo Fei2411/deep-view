@@ -1,0 +1,5 @@
+# Mounts the Deep UI host plugin; the browser half is discovered through the
+# package's dsh.client manifest and ./client export.
+- insert:
+    - id: deep-ui
+      name: dsh-deep-ui

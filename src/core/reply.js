@@ -1,0 +1,79 @@
+// The reply a view answer rides back on, and its text for history. Kept in the
+// exact ds-bot wire shape so either plugin reads the other's transcript.
+import { checkShownView, validateViewAnswer, viewSummary, inputsSummary } from './views.js'
+
+export { viewSummary }
+
+const REPLY_KIND = 'user-question-reply'
+
+// A show_view card as the user saw it, one line for a handoff or a checkpoint.
+// A call the tool would refuse showed no card, so it gives no text.
+export function viewCardText(args) {
+  let card = args
+  if (typeof card === 'string') {
+    try { card = JSON.parse(card) } catch { return '' }
+  }
+  const shown = checkShownView(card?.title, card?.view)
+  if (shown.error !== undefined) return ''
+  if (!shown.interactive && card?.await_reply === true) return ''
+  if (shown.interactive && card?.await_reply === false) return ''
+  const summary = viewSummary(shown.view)
+  const head = shown.title === '' ? '[View card]' : `[View card] ${shown.title}`
+  return summary === '' ? head : `${head}\n${summary}`
+}
+
+// The user's answer to a show_view card. The message carries the blueprint with
+// the answer, so the answer still makes sense after a checkpoint drops the card.
+export function viewReply(record, action, values) {
+  const checked = validateViewAnswer(record?.view, action, values)
+  if (checked.error !== undefined) return undefined
+  const callId = record.callId ?? record.id
+  const shown = { id: record.id, title: record.title, view: record.view }
+  const given = { id: record.id, action, values: checked }
+  return {
+    text: JSON.stringify({ kind: 'answer_to_pending_view', tool: 'show_view', callId, views: [shown], answers: [given] }),
+    source: { kind: REPLY_KIND, callId, outcome: 'answered' },
+  }
+}
+
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+// The view branch of a card reply: { views, answers } or undefined.
+export function readViewReply(text) {
+  let value
+  try { value = JSON.parse(text) } catch { return undefined }
+  if (value?.kind === 'answer_to_pending_view' || (Array.isArray(value?.views) && value.views.length > 0 && value?.kind !== 'answer_to_pending_question')) {
+    const views = (Array.isArray(value.views) ? value.views : []).filter(item => typeof item?.id === 'string' && typeof item.title === 'string' && isRecord(item.view))
+    if (views.length === 0) return undefined
+    const answers = (Array.isArray(value.answers) ? value.answers : []).filter(item => typeof item?.id === 'string' && typeof item.action === 'string' && isRecord(item.values))
+    return { views, answers }
+  }
+  return undefined
+}
+
+// The submitted component, and the view's inputs as the user left them.
+function actionSummary(answer, view) {
+  const values = answer?.values
+  if (!isRecord(values)) return '(skipped)'
+  const inputs = inputsSummary(view, values.inputs)
+  let text
+  if (Array.isArray(values.selected)) text = `selected: ${values.selected.join(', ')}`
+  else if (typeof values.confirmed === 'boolean') text = values.confirmed ? 'confirmed' : 'cancelled'
+  else if (isRecord(values.fields)) text = Object.entries(values.fields).map(([key, value]) => `${key}: ${value}`).join('; ')
+  else if (inputs !== '') text = ''
+  else text = typeof answer.action === 'string' && answer.action !== '' ? answer.action : '(skipped)'
+  if (inputs !== '') text = text === '' ? inputs : `${text}; ${inputs}`
+  if (text === '') text = '(empty)'
+  return text.length > 500 ? text.slice(0, 500) : text
+}
+
+// A view reply as model-facing history text; returns the text unchanged when it
+// is not a view reply.
+export function viewReplyText(text) {
+  const reply = readViewReply(text)
+  if (reply === undefined) return text
+  return reply.views.map((view) => {
+    const answer = reply.answers.find(item => item.id === view.id)
+    return `${view.title === '' ? '[Answer to view card]' : `[Answer to view card] ${view.title}`}\nAnswer: ${actionSummary(answer, view.view)}`
+  }).join('\n\n')
+}
