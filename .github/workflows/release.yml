@@ -76,7 +76,7 @@ jobs:
       - name: Publish
         if: github.event_name == 'release' || (!inputs.dry_run && github.ref == 'refs/heads/main')
         run: |
-          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest')"
+          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")"
           echo "Publishing $(node -p "require('./package.json').version") with the npm tag $tag"
           npm publish --provenance --access public --tag "$tag"
 
