@@ -25,5 +25,5 @@ export function ViewReplyNode({ node }) {
     return viewAnswerText(view.view, answer)
   }).filter(text => text !== '')
   if (lines.length === 0) return null
-  return h('div', { className: 'dui-urow' }, h('div', { className: 'dui-ububble' }, lines.join(' · ')))
+  return lines.join(' · ')
 }

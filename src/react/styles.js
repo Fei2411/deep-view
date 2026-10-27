@@ -17,8 +17,6 @@ body{
 --dui-star:var(--dsw-alias-state-warn-primary,var(--dsw-alias-state-warn-label));
 --dui-danger:var(--dsw-alias-state-error-primary);
 --dui-knob:var(--dsw-alias-label-primary-inverted,#fff);
---dui-user:var(--dsw-specific-bubble,var(--dsw-alias-state-business-primary));
---dui-user-ink:var(--dsw-alias-label-primary-inverted,var(--dsw-alias-label-primary));
 --dui-tag-bg:var(--dsw-alias-interactive-bg-hover);
 --dui-ink-tangerine:var(--dsw-alias-brand-text,var(--dsw-alias-state-warn-primary));
 --dui-ink-green:var(--dsw-alias-state-success-primary);
@@ -96,9 +94,6 @@ button.dui-q-opt:active{background:var(--dui-active)}
 .dui-switch-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--dui-knob);box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .15s ease}
 .dui-switch[aria-checked=true] .dui-switch-knob{transform:translateX(16px)}
 .dui-switch:focus-visible{outline:2px solid var(--dui-accent);outline-offset:2px}
-.dui-urow{display:flex;justify-content:flex-end}
-.dui-ububble{max-width:72%;background:var(--dui-user);color:var(--dui-user-ink);border-radius:18px;padding:7px 12px;font-size:14px;line-height:20px;box-sizing:border-box;overflow-wrap:anywhere}
-.dui-ububble p{margin:0;line-height:22px}
 .dui-gone{display:none}
 @keyframes dui-veil-in{from{opacity:0;filter:blur(6px)}}
 @keyframes dui-check-pop{from{opacity:0;scale:.4}}

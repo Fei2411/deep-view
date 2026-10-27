@@ -137,9 +137,8 @@ test('the reply bubble shows a compact answer summary, not the JSON', async () =
   const matched = viewReplyRule.match(replyText, 0)
   assert.ok(matched, 'rule claims the reply text')
   const { box, unmount } = await render(h(ViewReplyNode, { node: { data: { text: replyText } } }))
-  const bubble = box.querySelector('.dui-ububble')
-  assert.ok(bubble, 'bubble present')
-  assert.equal(bubble.textContent, 'B')
+  assert.equal(box.textContent.trim(), 'B', 'compact inline answer')
+  assert.equal(box.querySelector('.dui-ububble, .dui-urow'), null, 'no own bubble styling')
   await unmount()
 })
 
