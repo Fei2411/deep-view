@@ -37,7 +37,7 @@ export function install(ctx, config = {}) {
     return undefined
   }
 
-  ctx.tools.register(defineTool({
+  const showViewTool = defineTool({
     name: 'show_view',
     description: showViewDescription({ where: 'the chat', placement: 'It appears under your reply for this turn.' }),
     parameters: showViewParameters,
@@ -68,7 +68,8 @@ export function install(ctx, config = {}) {
       exec.concludeTurn?.()
       return 'The view is on screen; the user\'s answer arrives as their next message.'
     },
-  }))
+  })
+  ctx.tools.register(showViewTool)
 
   // Any user message or card answer admitted into a session drops its pending
   // view: the open card leaves the page without a reload.
@@ -86,6 +87,18 @@ export function install(ctx, config = {}) {
       switch (op) {
         case 'pending':
           return ok(sessionId === undefined ? null : (pending.get(sessionId) ?? null))
+        // Another plugin can register show_view in an agent's scope — then this
+        // session's cards are that plugin's to draw, not ours.
+        case 'serves': {
+          if (sessionId === undefined) return fail('No session', 'deep-ui/invalid')
+          try {
+            const resolved = await ctx.sessionController.resolveAgent(sessionId)
+            if (resolved.agent === undefined) return ok(true)
+            return ok(ctx.tools.get('show_view', resolved.agent) === showViewTool)
+          } catch {
+            return ok(true)
+          }
+        }
         case 'dismiss':
           if (sessionId === undefined) return fail('Nothing to dismiss', 'deep-ui/invalid')
           await pending.drop(sessionId)
