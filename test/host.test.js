@@ -83,6 +83,33 @@ test('interactive view: a delegated agent is refused', async () => {
   await t.stop()
 })
 
+test('interactive view: no agents registry cannot prove a delegated caller, so the view opens', async () => {
+  const t = start()
+  t.ctx.get = () => undefined
+  const text = await t.show({ view: CHOICES }, { callId: 'c10' })
+  assert.equal(text, 'The view is on screen; the user\'s answer arrives as their next message.')
+  assert.equal((await t.call('pending', { sessionId: 's1' })).value.callId, 'c10')
+  await t.stop()
+})
+
+test('interactive view: a failed write returns an error and the turn keeps running', async () => {
+  const file = mkdtempSync(join(tmpdir(), 'deep-ui-file-'))
+  const blocker = join(file, 'blocker')
+  await import('node:fs/promises').then(fs => fs.writeFile(blocker, 'x'))
+  const t = start()
+  t.stop = async () => rmSync(file, { recursive: true, force: true, maxRetries: 5 })
+  // A home inside a regular file cannot be created, so every write fails.
+  const home = join(blocker, 'sub')
+  const ctx = fakeContext()
+  Object.assign(ctx, { sessionController: { resolveAgent: async sessionId => ({ agent: { session: { id: sessionId } } }) }, sessions: { flush: async () => {} } })
+  const agent = { id: 'a1', root: true, session: { id: 's1' } }
+  ctx.agentsRegistry.map.set('a1', agent)
+  apply(ctx, { home })
+  const text = await ctx.registeredTools.get('show_view').execute({ view: CHOICES }, { agent, callId: 'c11', concluded: false, concludeTurn() { this.concluded = true } })
+  assert.match(text, /could not be kept open/)
+  await t.stop()
+})
+
 test('reply: validation, stale, duplicate, restore-on-failure, success shape', async () => {
   const t = start()
   await t.show({ view: CHOICES })
@@ -106,7 +133,7 @@ test('reply: validation, stale, duplicate, restore-on-failure, success shape', a
   // The failed flush left its follow-up queued, so the success is the second.
   assert.equal(t.sent.length, 2)
   const message = t.sent.at(-1).message
-  assert.equal(message.source.kind, 'user-question-reply')
+  assert.equal(message.source.kind, 'user')
   assert.equal(message.source.outcome, 'answered')
   const payload = JSON.parse(message.content[0].text)
   assert.equal(payload.kind, 'answer_to_pending_view')

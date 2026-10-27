@@ -26,10 +26,12 @@ export function install(ctx, config = {}) {
   const pending = createPendingStore(home)
 
   // Interactive views ask a human, so only the live runtime root may open one —
-  // the same boundary dsh-user-questions draws for ask_user_question.
+  // the same boundary dsh-user-questions draws for ask_user_question. Without
+  // the registry nothing can prove a delegated caller, so only a real non-root
+  // agent is refused.
   const assertLiveRoot = (agent) => {
     const agents = ctx.get('agents')
-    if (agents === undefined || agent === undefined || agents.get(agent.id) !== agent || !agents.roots().includes(agent)) {
+    if (agents !== undefined && (agent === undefined || agents.get(agent.id) !== agent || !agents.roots().includes(agent))) {
       return 'A view that waits for the user only works in a root session; include the unanswered question or decision in your final result.'
     }
     return undefined
@@ -37,7 +39,7 @@ export function install(ctx, config = {}) {
 
   ctx.tools.register(defineTool({
     name: 'show_view',
-    description: showViewDescription({ where: 'the chat' }),
+    description: showViewDescription({ where: 'the chat', placement: 'It appears under your reply for this turn.' }),
     parameters: showViewParameters,
     output,
     async execute(args, exec) {
@@ -52,13 +54,17 @@ export function install(ctx, config = {}) {
       if (refused !== undefined) return refused
       const sessionId = exec.agent?.session?.id
       if (typeof sessionId !== 'string') return 'This view cannot wait for the user here; include the question in your reply instead.'
-      await pending.set(sessionId, {
-        id: randomUUID(),
-        ...(exec.callId ? { callId: exec.callId } : {}),
-        title: checked.title,
-        view: checked.view,
-        askedAt: Date.now(),
-      })
+      try {
+        await pending.set(sessionId, {
+          id: randomUUID(),
+          ...(exec.callId ? { callId: exec.callId } : {}),
+          title: checked.title,
+          view: checked.view,
+          askedAt: Date.now(),
+        })
+      } catch (error) {
+        return `The view could not be kept open for an answer: ${error?.message ?? error}`
+      }
       exec.concludeTurn?.()
       return 'The view is on screen; the user\'s answer arrives as their next message.'
     },
@@ -70,7 +76,7 @@ export function install(ctx, config = {}) {
     const id = session?.id
     if (id === undefined || event?.type !== 'user/message') return
     const kind = event.data?.source?.kind
-    if (kind === 'user' || kind === 'user-question-reply') void pending.drop(id)
+    if (kind === 'user' || kind === 'user-question-reply') void pending.drop(id).catch(() => {})
   })
 
   const handle = async (op, body) => {
@@ -90,7 +96,7 @@ export function install(ctx, config = {}) {
           if (record === undefined || record.id !== body.viewId) return fail('This view is no longer open', 'deep-ui/stale')
           const checked = validateViewAnswer(record.view, body.action, body.values)
           if (checked.error !== undefined) return fail(checked.error, 'deep-ui/invalid')
-          const reply = viewReply(record, body.action, body.values)
+          const reply = viewReply(record, body.action, body.values, 'user')
           if (reply === undefined) return fail('Nothing to send', 'deep-ui/invalid')
           // Claim the view before queueing so a second answer is refused.
           await pending.drop(sessionId)

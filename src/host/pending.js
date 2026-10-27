@@ -6,8 +6,7 @@ import { join } from 'node:path'
 import { replaceFile } from './files.js'
 
 export function createPendingStore(home) {
-  const dir = join(home, 'deep-ui')
-  const path = join(dir, 'pending.json')
+  const path = join(home, 'pending.json')
   let views = null
   let writing = Promise.resolve()
 
@@ -18,14 +17,17 @@ export function createPendingStore(home) {
     views = typeof data === 'object' && data !== null && !Array.isArray(data) ? data : {}
   }
 
+  // The caller's promise rejects on a failed write; the stored chain swallows
+  // it so one failure does not jam the writes that follow.
   const save = () => {
-    writing = writing.then(async () => {
-      mkdirSync(dir, { recursive: true })
-      const temp = join(dir, `pending-${process.pid}-${Date.now()}.tmp`)
+    const run = writing.then(async () => {
+      mkdirSync(home, { recursive: true })
+      const temp = join(home, `pending-${process.pid}-${Date.now()}.tmp`)
       await writeFile(temp, JSON.stringify(views))
       await replaceFile(temp, path)
-    }).catch(() => {})
-    return writing
+    })
+    writing = run.catch(() => {})
+    return run
   }
 
   return {

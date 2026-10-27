@@ -24,7 +24,10 @@ export function viewCardText(args) {
 
 // The user's answer to a show_view card. The message carries the blueprint with
 // the answer, so the answer still makes sense after a checkpoint drops the card.
-export function viewReply(record, action, values) {
+// `sourceKind` is the admitted source kind on the reply: ds-bot rides its
+// question pipeline ('user-question-reply'); a host without one sends a plain
+// user message ('user').
+export function viewReply(record, action, values, sourceKind = REPLY_KIND) {
   const checked = validateViewAnswer(record?.view, action, values)
   if (checked.error !== undefined) return undefined
   const callId = record.callId ?? record.id
@@ -32,13 +35,48 @@ export function viewReply(record, action, values) {
   const given = { id: record.id, action, values: checked }
   return {
     text: JSON.stringify({ kind: 'answer_to_pending_view', tool: 'show_view', callId, views: [shown], answers: [given] }),
-    source: { kind: REPLY_KIND, callId, outcome: 'answered' },
+    source: { kind: sourceKind, callId, outcome: 'answered' },
   }
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 
-// The view branch of a card reply: { views, answers } or undefined.
+// Every component of the view, flattened, so option values and input ids
+// resolve back to the labels the user saw.
+function eachNode(view, visit) {
+  if (!isRecord(view)) return
+  visit(view)
+  for (const child of Array.isArray(view.children) ? view.children : []) eachNode(child, visit)
+}
+
+// The answer as one short line for the user's own bubble: the picked option
+// labels, the confirm or cancel label, `label: value` for a form, `label=value`
+// for submitted inputs.
+export function viewAnswerText(view, answer) {
+  const values = answer?.values
+  if (!isRecord(values)) return ''
+  const parts = []
+  if (Array.isArray(values.selected)) {
+    const labels = new Map()
+    eachNode(view, node => { for (const option of Array.isArray(node.options) ? node.options : []) for (const key of [option?.label, option?.value]) if (key !== undefined) labels.set(key, option?.label) })
+    parts.push(...values.selected.map(value => labels.get(value) ?? String(value)))
+  } else if (typeof values.confirmed === 'boolean') {
+    let confirmLabel, cancelLabel
+    eachNode(view, node => { if (node.id === answer.action) { confirmLabel = node.confirmLabel; cancelLabel = node.cancelLabel } })
+    parts.push(values.confirmed ? (confirmLabel ?? 'Confirmed') : (cancelLabel ?? 'Cancelled'))
+  } else if (isRecord(values.fields)) {
+    const labels = new Map()
+    eachNode(view, node => { for (const field of Array.isArray(node.fields) ? node.fields : []) labels.set(field?.id, field?.label ?? field?.id) })
+    parts.push(...Object.entries(values.fields).map(([key, value]) => `${labels.get(key) ?? key}: ${value}`))
+  }
+  if (isRecord(values.inputs)) {
+    const labels = new Map()
+    eachNode(view, node => { if (typeof node.id === 'string' && node.label !== undefined) labels.set(node.id, node.label) })
+    parts.push(...Object.entries(values.inputs).map(([key, value]) => `${labels.get(key) ?? key}=${value}`))
+  }
+  const text = parts.join('; ')
+  return text.length > 200 ? `${text.slice(0, 200)}…` : text
+}
 export function readViewReply(text) {
   let value
   try { value = JSON.parse(text) } catch { return undefined }

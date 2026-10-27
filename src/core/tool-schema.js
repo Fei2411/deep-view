@@ -14,7 +14,8 @@ export const showViewParameters = {
 }
 
 // `where` names the surface the view draws in: "the chat" here, "your own chat"
-// for a host whose agents each own one.
-export function showViewDescription({ where = 'the chat' } = {}) {
-  return `Draw a view in ${where} as part of your reply: a chart, key numbers, a table, a small calculator the user can try values in, or a choice, confirmation or short form. Text you write before and after the call shows around it. Use a view when it answers better than text: a chart to compare values or show a trend, inputs with formulas to let the user try numbers (worked out in the page, no new turn), options to let the user pick. Plain rows and columns read fine as a Markdown table, and one number needs no view. Give the answer first, then the view. Never invent data; mark sample numbers and assumptions as such. Do not repeat the same data as text, chart and table. Add only the controls the user needs. A view with options, confirm, form or submit ends your turn, and the answer arrives as the user's next message. Never collect a key, token or password. Keep the view under 8 KB.`
+// for a host whose agents each own one. `placement` is the sentence that tells
+// the model where the card lands; each host keeps its own wording.
+export function showViewDescription({ where = 'the chat', placement = 'Text you write before and after the call shows around it.' } = {}) {
+  return `Draw a view in ${where} as part of your reply: a chart, key numbers, a table, a small calculator the user can try values in, or a choice, confirmation or short form. ${placement} Use a view when it answers better than text: a chart to compare values or show a trend, inputs with formulas to let the user try numbers (worked out in the page, no new turn), options to let the user pick. Plain rows and columns read fine as a Markdown table, and one number needs no view. Give the answer first, then the view. Never invent data; mark sample numbers and assumptions as such. Do not repeat the same data as text, chart and table. Add only the controls the user needs. A view with options, confirm, form or submit ends your turn, and the answer arrives as the user's next message. Never collect a key, token or password. Keep the view under 8 KB.`
 }

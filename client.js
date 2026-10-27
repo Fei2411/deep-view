@@ -2292,6 +2292,55 @@ button.dui-q-opt:active{background:var(--dui-active)}
 // src/react/index.js
 var DEEP_UI_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
+// src/client/views-definition.js
+var viewsDefinition = {
+  kind: "deep-ui-views",
+  match(event) {
+    if (event?.type === "turn/start") return { id: String(event.data?.turn), role: "start" };
+    if (event?.type === "tool/call" && event.data?.name === "show_view") return { id: String(event.data?.turn), role: "update" };
+    if (event?.type === "tool/result" && event.data?.turn !== void 0) return { id: String(event.data.turn), role: "update" };
+    return null;
+  },
+  start: (context, match) => ({ turn: match.event.data.turn, calls: /* @__PURE__ */ new Map() }),
+  update: (context, match) => {
+    const { state } = context;
+    const event = match.event;
+    if (event.type === "tool/call") {
+      let args = null;
+      try {
+        args = JSON.parse(event.data.arguments);
+      } catch {
+        args = null;
+      }
+      if (args === null || typeof args !== "object" || Array.isArray(args)) return state;
+      const calls = new Map(state.calls);
+      calls.set(String(event.data.callId), { callId: String(event.data.callId), args, ok: null });
+      return { ...state, calls };
+    }
+    if (event.type === "tool/result") {
+      const callId = String(event.data?.message?.source?.callId ?? "");
+      if (!state.calls.has(callId)) return state;
+      const calls = new Map(state.calls);
+      calls.set(callId, { ...calls.get(callId), ok: event.data.message?.isError !== true });
+      return { ...state, calls };
+    }
+    return state;
+  },
+  buildLocationData: (context, scope, previous) => {
+    if (scope !== "turn" || context.state === void 0) return null;
+    const views = [...context.state.calls.values()].filter((call2) => call2.ok === true);
+    if (previous?.kind === "turn" && previous.turn === context.state.turn && previous.key === "deep-ui-views" && previous.value.views.length === views.length && previous.value.views.every((call2, index) => call2 === views[index])) {
+      return previous;
+    }
+    return {
+      kind: "turn",
+      turn: context.state.turn,
+      key: "deep-ui-views",
+      value: { views }
+    };
+  }
+};
+
 // src/client/api.js
 var ROUTE = "api/deep-ui";
 var call = async (op, payload, signal) => {
@@ -2310,15 +2359,41 @@ var call = async (op, payload, signal) => {
   return result.value;
 };
 
-// src/client/cell.js
+// src/client/tail.js
 var import_react5 = require("react");
-function ShowViewCell({ callId, sessionId, block, useConversation }) {
-  const args = block?.args ?? block?.call?.args ?? block?.arguments;
-  const conversation = useConversation?.((value) => value);
+var REPLY_HEAD = '{"kind":"answer_to_pending_view"';
+var findReplyText = (snapshot, callId) => {
+  const chat = snapshot?.views?.get?.("chat");
+  if (chat === void 0) return void 0;
+  const needle = `"callId":"${callId}"`;
+  for (const node of chat.nodes?.values?.() ?? []) {
+    const data = node?.data;
+    const text = typeof data?.text === "string" ? data.text : Array.isArray(data?.content) ? data.content.filter((block) => block?.type === "text").map((block) => block.text).join("\n") : void 0;
+    if (typeof text === "string" && text.startsWith(REPLY_HEAD) && text.includes(needle)) return text;
+  }
+  return void 0;
+};
+var SettledView = ({ replyText }) => {
+  let payload = null;
+  try {
+    payload = JSON.parse(replyText);
+  } catch {
+    payload = null;
+  }
+  const view = payload?.views?.[0];
+  if (view === void 0 || view?.view === void 0) return null;
+  const answers = Array.isArray(payload.answers) ? payload.answers : [];
+  const answer = answers.find((entry) => entry?.id === view.id) ?? answers[0] ?? null;
+  return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: view.title ?? "", view: view.view, settled: true, answer }));
+};
+var InteractiveView = ({ callId, sessionId, useConversation }) => {
+  const order = useConversation?.((snapshot) => snapshot?.views?.get?.("chat")?.order?.length ?? 0) ?? 0;
+  const replyText = useConversation?.((snapshot) => findReplyText(snapshot, callId));
   const [record, setRecord] = (0, import_react5.useState)(void 0);
   const [revision, setRevision] = (0, import_react5.useState)(0);
+  const [flying, setFlying] = (0, import_react5.useState)(false);
   (0, import_react5.useEffect)(() => {
-    if (typeof sessionId !== "string") return void 0;
+    if (typeof sessionId !== "string" || replyText !== void 0) return void 0;
     let alive = true;
     call("pending", { sessionId }).then((value) => {
       if (alive) setRecord(value);
@@ -2328,70 +2403,38 @@ function ShowViewCell({ callId, sessionId, block, useConversation }) {
     return () => {
       alive = false;
     };
-  }, [sessionId, conversation, revision]);
-  const shown = checkShownView(args?.text?.("title"), args?.value?.("view"));
-  const [flying, setFlying] = (0, import_react5.useState)(false);
-  const busyRef = (0, import_react5.useRef)(false);
+  }, [sessionId, order, replyText, revision]);
+  if (replyText !== void 0) return (0, import_react5.createElement)(SettledView, { replyText });
+  if (flying === "gone" || record === void 0 || record === null || record.callId !== callId) return null;
   const run2 = (make) => {
-    if (busyRef.current) return;
-    busyRef.current = true;
+    if (flying) return;
     setFlying(true);
-    void Promise.resolve().then(make).catch(() => setFlying(false)).finally(() => {
-      busyRef.current = false;
+    void Promise.resolve().then(make).then(() => setFlying("gone")).catch(() => {
+      setFlying(false);
       setRevision((value) => value + 1);
     });
   };
-  if (shown.error !== void 0) return null;
-  if (!shown.interactive && args?.value?.("await_reply") !== true) {
-    return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: shown.title, view: shown.view }));
-  }
-  if (record === void 0 || record === null || record.callId !== callId || flying === "gone") {
-    return (0, import_react5.createElement)("span", { className: "dui-gone", hidden: true });
-  }
-  const onSubmit = (action, values) => run2(() => call("reply", { sessionId, viewId: record.id, action, values }).then(() => setFlying("gone")));
-  const onDismiss = () => run2(() => call("dismiss", { sessionId }).then(() => setFlying("gone")));
-  if (flying === true) return (0, import_react5.createElement)("span", { className: "dui-gone", hidden: true });
+  const onSubmit = (action, values) => run2(() => call("reply", { sessionId, viewId: record.id, action, values }));
+  const onDismiss = () => run2(() => call("dismiss", { sessionId }));
   return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: record.title ?? "", view: record.view, onSubmit, onDismiss, busy: flying === true }));
-}
-
-// src/client/dock.js
-var import_react6 = require("react");
-function PendingDock({ sessionId, useConversation }) {
-  const conversation = useConversation?.((value) => value);
-  const [record, setRecord] = (0, import_react6.useState)(void 0);
-  const [busy, setBusy] = (0, import_react6.useState)(false);
-  (0, import_react6.useEffect)(() => {
-    if (typeof sessionId !== "string") return void 0;
-    let alive = true;
-    call("pending", { sessionId }).then((value) => {
-      if (alive) setRecord(value);
-    }).catch(() => {
-      if (alive) setRecord(null);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [sessionId, conversation]);
-  if (!record) return null;
-  const gone = () => setRecord(null);
-  const onSubmit = (action, values) => {
-    if (busy) return;
-    setBusy(true);
-    call("reply", { sessionId, viewId: record.id, action, values }).then(gone).catch(() => setBusy(false));
-  };
-  const onDismiss = () => {
-    if (busy) return;
-    setBusy(true);
-    call("dismiss", { sessionId }).then(gone).catch(() => setBusy(false));
-  };
-  return (0, import_react6.createElement)("div", { className: "dui-q-inline" }, (0, import_react6.createElement)(WidgetCard, {
-    title: record.title ?? "",
-    view: record.view,
-    onSubmit,
-    onDismiss,
-    busy,
-    raised: true
-  }));
+};
+var TailView = ({ call: call2, sessionId, useConversation }) => {
+  const shown = checkShownView(call2.args?.title, call2.args?.view);
+  if (shown.error !== void 0) return null;
+  if (!shown.interactive && call2.args?.await_reply === true) return null;
+  if (shown.interactive && call2.args?.await_reply === false) return null;
+  if (shown.interactive || call2.args?.await_reply === true) {
+    return (0, import_react5.createElement)(InteractiveView, { callId: call2.callId, sessionId, useConversation });
+  }
+  return (0, import_react5.createElement)("div", { className: "dui-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: shown.title, view: shown.view }));
+};
+function ViewsTail({ turn, sessionId, useConversation }) {
+  const source = (0, import_react5.useMemo)(() => turn?.data?.source?.("deep-ui-views"), [turn]);
+  const data = (0, import_react5.useSyncExternalStore)(source?.subscribe ?? (() => () => {
+  }), () => source?.getSnapshot());
+  const views = data?.views ?? [];
+  if (views.length === 0) return null;
+  return views.map((item) => (0, import_react5.createElement)(TailView, { key: item.callId, call: item, sessionId, useConversation }));
 }
 
 // src/core/reply.js
@@ -2414,7 +2457,7 @@ function viewCardText(args) {
   return summary === "" ? head : `${head}
 ${summary}`;
 }
-function viewReply(record, action, values) {
+function viewReply(record, action, values, sourceKind = REPLY_KIND) {
   const checked = validateViewAnswer(record?.view, action, values);
   if (checked.error !== void 0) return void 0;
   const callId = record.callId ?? record.id;
@@ -2422,10 +2465,51 @@ function viewReply(record, action, values) {
   const given = { id: record.id, action, values: checked };
   return {
     text: JSON.stringify({ kind: "answer_to_pending_view", tool: "show_view", callId, views: [shown], answers: [given] }),
-    source: { kind: REPLY_KIND, callId, outcome: "answered" }
+    source: { kind: sourceKind, callId, outcome: "answered" }
   };
 }
 var isRecord2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function eachNode(view, visit) {
+  if (!isRecord2(view)) return;
+  visit(view);
+  for (const child of Array.isArray(view.children) ? view.children : []) eachNode(child, visit);
+}
+function viewAnswerText(view, answer) {
+  const values = answer?.values;
+  if (!isRecord2(values)) return "";
+  const parts = [];
+  if (Array.isArray(values.selected)) {
+    const labels = /* @__PURE__ */ new Map();
+    eachNode(view, (node) => {
+      for (const option of Array.isArray(node.options) ? node.options : []) for (const key of [option?.label, option?.value]) if (key !== void 0) labels.set(key, option?.label);
+    });
+    parts.push(...values.selected.map((value) => labels.get(value) ?? String(value)));
+  } else if (typeof values.confirmed === "boolean") {
+    let confirmLabel, cancelLabel;
+    eachNode(view, (node) => {
+      if (node.id === answer.action) {
+        confirmLabel = node.confirmLabel;
+        cancelLabel = node.cancelLabel;
+      }
+    });
+    parts.push(values.confirmed ? confirmLabel ?? "Confirmed" : cancelLabel ?? "Cancelled");
+  } else if (isRecord2(values.fields)) {
+    const labels = /* @__PURE__ */ new Map();
+    eachNode(view, (node) => {
+      for (const field of Array.isArray(node.fields) ? node.fields : []) labels.set(field?.id, field?.label ?? field?.id);
+    });
+    parts.push(...Object.entries(values.fields).map(([key, value]) => `${labels.get(key) ?? key}: ${value}`));
+  }
+  if (isRecord2(values.inputs)) {
+    const labels = /* @__PURE__ */ new Map();
+    eachNode(view, (node) => {
+      if (typeof node.id === "string" && node.label !== void 0) labels.set(node.id, node.label);
+    });
+    parts.push(...Object.entries(values.inputs).map(([key, value]) => `${labels.get(key) ?? key}=${value}`));
+  }
+  const text = parts.join("; ");
+  return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+}
 function readViewReply(text) {
   let value;
   try {
@@ -2466,37 +2550,7 @@ Answer: ${actionSummary(answer, view.view)}`;
 }
 
 // src/client/reply-node.js
-var import_react7 = require("react");
-var isViewReply = (data) => {
-  if (Array.isArray(data?.views) && data.views.length > 0) return true;
-  return readViewReply(typeof data?.text === "string" ? data.text : "") !== void 0;
-};
-function QuestionReply({ node, t }) {
-  const data = node.data ?? {};
-  const questions = Array.isArray(data.questions) ? data.questions : [];
-  const answers = Array.isArray(data.answers) ? data.answers : [];
-  if (questions.length === 0) {
-    return data.text ? (0, import_react7.createElement)("div", { className: "dui-urow" }, (0, import_react7.createElement)("div", { className: "dui-ububble" }, data.text)) : null;
-  }
-  return (0, import_react7.createElement)("div", { className: "dui-q-inline" }, questions.map((question) => {
-    const answer = answers.find((item) => item.id === question.id);
-    const values = [...answer?.selected ?? [], ...answer?.custom ? [answer.custom] : []];
-    return (0, import_react7.createElement)(
-      "div",
-      { key: question.id, className: "dui-q dui-q-settled", role: "group" },
-      (0, import_react7.createElement)("p", { className: "dui-q-title" }, question.header ?? question.question),
-      (0, import_react7.createElement)(
-        "div",
-        { className: "dui-q-body" },
-        (0, import_react7.createElement)("span", { className: "dui-q-label" }, values.length > 0 ? values.join(", ") : t("(skipped)"))
-      )
-    );
-  }));
-}
-function ReplyNode({ node, t }) {
-  if (isViewReply(node?.data)) return (0, import_react7.createElement)(AnsweredView, { node });
-  return (0, import_react7.createElement)(QuestionReply, { node, t });
-}
+var import_react6 = require("react");
 var viewReplyRule = {
   id: "deep-ui-view-reply",
   order: 10,
@@ -2509,11 +2563,18 @@ var viewReplyRule = {
   }
 };
 function ViewReplyNode({ node }) {
-  return (0, import_react7.createElement)(AnsweredView, { node: { data: { text: node.data?.text } } });
+  const reply = readViewReply(node.data?.text ?? "");
+  if (reply === void 0) return null;
+  const lines = reply.views.map((view) => {
+    const answer = reply.answers.find((item) => item.id === view.id) ?? reply.answers[0];
+    return viewAnswerText(view.view, answer);
+  }).filter((text) => text !== "");
+  if (lines.length === 0) return null;
+  return (0, import_react6.createElement)("div", { className: "dui-urow" }, (0, import_react6.createElement)("div", { className: "dui-ububble" }, lines.join(" · ")));
 }
 
 // src/client/index.js
-var import_react8 = require("react");
+var import_react7 = require("react");
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 var NS = "deep-ui";
 var en = {
@@ -2569,7 +2630,7 @@ var zh = {
   "(skipped)": "（已跳过）"
 };
 var withUi = (Component) => function DeepUiView(props) {
-  return (0, import_react8.createElement)(ViewUi.Provider, { value: { t: props.t ?? ((key) => key), Markdown: import_dsh_client_ui_primitives.MarkdownText } }, (0, import_react8.createElement)(Component, props));
+  return (0, import_react7.createElement)(ViewUi.Provider, { value: { t: props.t ?? ((key) => key), Markdown: import_dsh_client_ui_primitives.MarkdownText } }, (0, import_react7.createElement)(Component, props));
 };
 var inject = ["slots", "uiConversation", "locale"];
 function apply(ctx) {
@@ -2593,22 +2654,12 @@ function apply(ctx) {
       tag.remove();
     };
   }, "deep-ui: labels and styles"));
-  step("tool view", () => ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({
-    name: "tool.call.toolview",
-    key: "show_view",
+  step("views definition", () => ctx.effect(() => ctx.uiConversation.events.register(viewsDefinition), "deep-ui: views definition"));
+  step("turn tail", () => ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({
+    name: "conversation.chat.turnTail",
+    id: "deep-ui-views",
     locale: NS
-  }, withUi(ShowViewCell))));
-  step("pending dock", () => ctx.slots.inject("conversation.composer.dock", () => ctx.slots.register({
-    name: "conversation.composer.dock",
-    id: "deep-ui-pending",
-    locale: NS
-  }, withUi(PendingDock))));
-  step("reply node", () => ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
-    name: "conversation.chat.node",
-    key: "question-reply",
-    priority: -100,
-    locale: NS
-  }, withUi(ReplyNode))));
+  }, withUi(ViewsTail))));
   step("user text rule", () => ctx.uiConversation.userText.register(viewReplyRule));
   step("user text node", () => ctx.slots.inject("conversation.user.text.node", () => ctx.slots.register({
     name: "conversation.user.text.node",

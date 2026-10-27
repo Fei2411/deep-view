@@ -44,6 +44,15 @@ function decide(body) {
     } catch { return [text('Thanks.')] }
   }
   const command = textOf(last?.content).trim().toLowerCase()
+  // The title request carries no tools; answer it before the tool gate.
+  if (command.startsWith('generate the session title')) {
+    let title = 'session'
+    try {
+      const human = JSON.parse(command.slice(command.indexOf('[')))
+      title = String(human.at(-1)?.text ?? 'session').slice(0, 60)
+    } catch { /* keep the default */ }
+    return [text(title)]
+  }
   if (!tools.has('show_view')) return [text('show_view is not registered here.')]
   if (command.startsWith('view options')) {
     return [text('Pick a lane:'), tool('show_view', { title: 'Pick a lane', view: { type: 'options', id: 'lane', options: [{ label: 'Ship now', description: 'It is good enough' }, { label: 'One more pass' }, { label: 'Sleep on it' }] } })]

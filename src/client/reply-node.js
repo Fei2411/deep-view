@@ -1,42 +1,10 @@
-// The answered view: DSH's question pipeline claims a user-question-reply into
-// a 'question-reply' chat node; ours renders the settled card when the reply
-// carries a view, and a compact transcript for the question replies it shadows.
+// The view answer's own user bubble: the reply message is a plain user message
+// whose text is the answer_to_pending_view JSON. The rule claims that text so
+// the raw JSON never reaches the bubble, and the node draws one compact line —
+// the picked labels, the confirm or cancel label, or the submitted values.
 import { createElement as h } from 'react'
-import { readViewReply } from '../core/reply.js'
-import { AnsweredView } from '../react/card.js'
+import { readViewReply, viewAnswerText } from '../core/reply.js'
 
-const isViewReply = (data) => {
-  if (Array.isArray(data?.views) && data.views.length > 0) return true
-  return readViewReply(typeof data?.text === 'string' ? data.text : '') !== undefined
-}
-
-// A real ask_user_question reply, as a simple read-only transcript: Deep UI has
-// no access to the shipped renderer (the questions UI bundle exports only its
-// plugin), so it draws the pairs itself rather than leaving a dead row.
-function QuestionReply({ node, t }) {
-  const data = node.data ?? {}
-  const questions = Array.isArray(data.questions) ? data.questions : []
-  const answers = Array.isArray(data.answers) ? data.answers : []
-  if (questions.length === 0) {
-    return data.text ? h('div', { className: 'dui-urow' }, h('div', { className: 'dui-ububble' }, data.text)) : null
-  }
-  return h('div', { className: 'dui-q-inline' }, questions.map((question) => {
-    const answer = answers.find(item => item.id === question.id)
-    const values = [...(answer?.selected ?? []), ...(answer?.custom ? [answer.custom] : [])]
-    return h('div', { key: question.id, className: 'dui-q dui-q-settled', role: 'group' },
-      h('p', { className: 'dui-q-title' }, question.header ?? question.question),
-      h('div', { className: 'dui-q-body' },
-        h('span', { className: 'dui-q-label' }, values.length > 0 ? values.join(', ') : t('(skipped)'))))
-  }))
-}
-
-export function ReplyNode({ node, t }) {
-  if (isViewReply(node?.data)) return h(AnsweredView, { node })
-  return h(QuestionReply, { node, t })
-}
-
-// The same reply in a deployment without the questions UI: the message is a
-// plain user text, and this rule turns the JSON body into a node.
 export const viewReplyRule = {
   id: 'deep-ui-view-reply',
   order: 10,
@@ -50,5 +18,12 @@ export const viewReplyRule = {
 }
 
 export function ViewReplyNode({ node }) {
-  return h(AnsweredView, { node: { data: { text: node.data?.text } } })
+  const reply = readViewReply(node.data?.text ?? '')
+  if (reply === undefined) return null
+  const lines = reply.views.map((view) => {
+    const answer = reply.answers.find(item => item.id === view.id) ?? reply.answers[0]
+    return viewAnswerText(view.view, answer)
+  }).filter(text => text !== '')
+  if (lines.length === 0) return null
+  return h('div', { className: 'dui-urow' }, h('div', { className: 'dui-ububble' }, lines.join(' · ')))
 }

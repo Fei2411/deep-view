@@ -1,12 +1,12 @@
-// Deep UI's browser half: the show_view tool view, the answered-view reply
-// node, labels and the stylesheet. The host half lives in ../host.
+// Deep UI's browser half: the turn-tail views, the answer bubble, labels and
+// the stylesheet. The host half lives in ../host.
 import { createElement as h } from 'react'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ViewUi } from '../react/ui.js'
 import { DEEP_UI_CSS } from '../react/index.js'
-import { ShowViewCell } from './cell.js'
-import { PendingDock } from './dock.js'
-import { ReplyNode, ViewReplyNode, viewReplyRule } from './reply-node.js'
+import { viewsDefinition } from './views-definition.js'
+import { ViewsTail } from './tail.js'
+import { ViewReplyNode, viewReplyRule } from './reply-node.js'
 
 const NS = 'deep-ui'
 
@@ -85,27 +85,17 @@ export function apply(ctx) {
     return () => { dispose(); tag.remove() }
   }, 'deep-ui: labels and styles'))
 
-  step('tool view', () => ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
-    name: 'tool.call.toolview',
-    key: 'show_view',
+  // Successful show_view calls publish `deep-ui-views` data on their turn…
+  step('views definition', () => ctx.effect(() => ctx.uiConversation.events.register(viewsDefinition), 'deep-ui: views definition'))
+  // …and the tail under the turn's closing message draws them.
+  step('turn tail', () => ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+    name: 'conversation.chat.turnTail',
+    id: 'deep-ui-views',
     locale: NS,
-  }, withUi(ShowViewCell))))
+  }, withUi(ViewsTail))))
 
-  step('pending dock', () => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
-    name: 'conversation.composer.dock',
-    id: 'deep-ui-pending',
-    locale: NS,
-  }, withUi(PendingDock))))
-
-  step('reply node', () => ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node',
-    key: 'question-reply',
-    priority: -100,
-    locale: NS,
-  }, withUi(ReplyNode))))
-
-  // A deployment without the questions UI shows the reply as plain user text;
-  // the rule turns the JSON body into a card there.
+  // The reply message is a plain user message; the rule claims its JSON body
+  // and the node draws the compact answer summary in the bubble.
   step('user text rule', () => ctx.uiConversation.userText.register(viewReplyRule))
   step('user text node', () => ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
     name: 'conversation.user.text.node',
