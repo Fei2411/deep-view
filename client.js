@@ -2316,7 +2316,7 @@ var viewsDefinition = {
       const callId = String(event.data?.message?.source?.callId ?? "");
       if (!state.calls.has(callId)) return state;
       const calls = new Map(state.calls);
-      const mine = event.data.message?.meta?.owner === "dsh-deep-ui";
+      const mine = event.data?.meta?.owner === "dsh-deep-ui";
       calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true });
       return { ...state, calls };
     }
