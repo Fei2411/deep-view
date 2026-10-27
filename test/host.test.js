@@ -10,7 +10,7 @@ const CHOICES = { type: 'options', id: 'pick', options: [{ label: 'A' }, { label
 const METER = { type: 'metric', label: 'Progress', value: '70%' }
 
 function start({ beforeApply } = {}) {
-  const home = mkdtempSync(join(tmpdir(), 'deep-ui-'))
+  const home = mkdtempSync(join(tmpdir(), 'deep-view-'))
   const ctx = fakeContext()
   const sent = []
   let flushError
@@ -32,7 +32,7 @@ function start({ beforeApply } = {}) {
   }
   const exec = (over = {}) => ({ agent, callId: 'call-1', concluded: false, concludeTurn() { this.concluded = true }, ...over })
   const show = (args, execOver) => ctx.registeredTools.get('show_view').execute(args, exec(execOver))
-  const call = async (op, body) => (await route.fetch(new Request(`http://localhost/api/deep-ui`, {
+  const call = async (op, body) => (await route.fetch(new Request(`http://localhost/api/deep-view`, {
     method: 'POST', body: JSON.stringify({ op, ...body }),
   }))).json()
   return { ctx, emit, show, call, sent, failFlush(e) { flushError = e }, stop: async () => { rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
@@ -52,7 +52,7 @@ test('the tool output marks its results so the client draws only its own calls',
   const { ctx, stop } = start()
   try {
     const tool = ctx.registeredTools.get('show_view')
-    assert.deepEqual(tool.output.presentationMeta({ view: {} }, 'The view is on screen.'), { owner: 'dsh-deep-ui' })
+    assert.deepEqual(tool.output.presentationMeta({ view: {} }, 'The view is on screen.'), { owner: 'deep-view' })
   } finally { await stop() }
 })
 
@@ -112,7 +112,7 @@ test('interactive view: no agents registry cannot prove a delegated caller, so t
 })
 
 test('interactive view: a failed write returns an error and the turn keeps running', async () => {
-  const file = mkdtempSync(join(tmpdir(), 'deep-ui-file-'))
+  const file = mkdtempSync(join(tmpdir(), 'deep-view-file-'))
   const blocker = join(file, 'blocker')
   await import('node:fs/promises').then(fs => fs.writeFile(blocker, 'x'))
   const t = start()
@@ -139,7 +139,7 @@ test('reply: validation, stale, duplicate, restore-on-failure, success shape', a
   assert.match(bad.error.message, /select at least one/)
   // Stale id refused.
   const stale = await t.call('reply', { sessionId: 's1', viewId: 'other', action: 'pick', values: { selected: ['A'] } })
-  assert.equal(stale.error.code, 'deep-ui/stale')
+  assert.equal(stale.error.code, 'deep-view/stale')
   // Flush failure restores the record.
   t.failFlush(new Error('offline'))
   const failed = await t.call('reply', { sessionId: 's1', viewId: record.id, action: 'pick', values: { selected: ['A'] } })
@@ -159,7 +159,7 @@ test('reply: validation, stale, duplicate, restore-on-failure, success shape', a
   assert.deepEqual(payload.answers[0].values.selected, ['A'])
   // Duplicate refused: the record is claimed.
   const dup = await t.call('reply', { sessionId: 's1', viewId: record.id, action: 'pick', values: { selected: ['B'] } })
-  assert.equal(dup.error.code, 'deep-ui/stale')
+  assert.equal(dup.error.code, 'deep-view/stale')
   await t.stop()
 })
 

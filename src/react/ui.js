@@ -22,7 +22,7 @@ export function CloseIcon() {
 
 // A few short options sit side by side as segmented buttons.
 export function Segmented({ label, value, className, children }) {
-  return h('div', { className: className ? `dui-seg ${className}` : 'dui-seg', role: 'group', 'aria-label': label, 'data-active': value }, children)
+  return h('div', { className: className ? `dv-seg ${className}` : 'dv-seg', role: 'group', 'aria-label': label, 'data-active': value }, children)
 }
 
 export const keyLetter = index => String.fromCharCode(65 + index)

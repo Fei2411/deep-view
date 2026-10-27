@@ -1,7 +1,7 @@
 {
-  "name": "deep-ui-test-harness",
+  "name": "deep-view-test-harness",
   "private": true,
-  "description": "The DeepSeek Harness packages that the unit tests and the linter run against. Install with npm run harness in deep-ui/.",
+  "description": "The DeepSeek Harness packages that the unit tests and the linter run against. Install with npm run harness in deep-view/.",
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.1-rc.2",
     "jsdom": "29.1.1",

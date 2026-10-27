@@ -6,14 +6,14 @@ import { createElement as h } from 'react'
 import { readViewReply, viewAnswerText } from '../core/reply.js'
 
 export const viewReplyRule = {
-  id: 'deep-ui-view-reply',
+  id: 'deep-view-view-reply',
   order: 10,
   match: (text, from) => {
     const rest = text.slice(from).trimStart()
     const start = from + (text.slice(from).length - rest.length)
     const data = readViewReply(rest)
     if (data === undefined) return undefined
-    return { id: 'deep-ui-view-reply', start, end: text.length, data: { text: rest } }
+    return { id: 'deep-view-view-reply', start, end: text.length, data: { text: rest } }
   },
 }
 

@@ -1,6 +1,6 @@
-# Deep UI
+# Deep View
 
-Deep UI is a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that lets any agent draw interactive views in the chat: charts, key numbers, tables, small calculators the user can try values in, and choices, confirmations or short forms. Structured answers that are awkward as Markdown — a comparison chart, a what-if slider, a pick-one prompt — become a card in the conversation.
+Deep View is a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that lets any agent draw interactive views in the chat: charts, key numbers, tables, small calculators the user can try values in, and choices, confirmations or short forms. Structured answers that are awkward as Markdown — a comparison chart, a what-if slider, a pick-one prompt — become a card in the conversation.
 
 It is the standalone home of the `show_view` feature that DS Bot ships for its Bots, and it holds the shared core (`src/core`) and the presentational widgets (`src/react`) that other hosts can build on.
 
@@ -10,13 +10,13 @@ Add the package to the DSH profile's plugins (Desktop's plugin UI, or a `cordis.
 
 ```yaml
 - insert:
-    - id: deep-ui
-      name: dsh-deep-ui
+    - id: deep-view
+      name: deep-view
 ```
 
 Then restart the session. `show_view` appears in every agent's tool list.
 
-Using it together with DS Bot needs a DS Bot version that scopes its own `show_view` per session; with an older one, Deep UI stays installed but its tool is off.
+With DS Bot, use a DS Bot version newer than 0.2.3; with older versions Deep View installs but its `show_view` tool stays off.
 
 ## What an agent can draw
 

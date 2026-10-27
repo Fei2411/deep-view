@@ -1,14 +1,14 @@
-// Deep UI's browser half: the turn-tail views, the answer bubble, labels and
+// Deep View's browser half: the turn-tail views, the answer bubble, labels and
 // the stylesheet. The host half lives in ../host.
 import { createElement as h } from 'react'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ViewUi } from '../react/ui.js'
-import { DEEP_UI_CSS } from '../react/index.js'
+import { DEEP_VIEW_CSS } from '../react/index.js'
 import { viewsDefinition } from './views-definition.js'
 import { ViewsTail } from './tail.js'
 import { ViewReplyNode, viewReplyRule } from './reply-node.js'
 
-const NS = 'deep-ui'
+const NS = 'deep-view'
 
 const en = {
   'Cancel': 'Cancel',
@@ -73,24 +73,24 @@ export const inject = ['slots', 'uiConversation', 'locale']
 
 export function apply(ctx) {
   const step = (label, run) => {
-    try { run() } catch (error) { console.error(`dsh-deep-ui: ${label} failed`, error) }
+    try { run() } catch (error) { console.error(`deep-view: ${label} failed`, error) }
   }
   step('labels and styles', () => ctx.effect(() => {
     const dispose = typeof ctx.locale?.register === 'function' ? ctx.locale.register(NS, { zh, en }) : () => {}
     const tag = document.createElement('style')
-    tag.dataset.plugin = 'dsh-deep-ui'
-    tag.dataset.pluginCss = 'dsh-deep-ui/views'
-    tag.textContent = DEEP_UI_CSS
+    tag.dataset.plugin = 'deep-view'
+    tag.dataset.pluginCss = 'deep-view/views'
+    tag.textContent = DEEP_VIEW_CSS
     document.head.appendChild(tag)
     return () => { dispose(); tag.remove() }
-  }, 'deep-ui: labels and styles'))
+  }, 'deep-view: labels and styles'))
 
-  // Successful show_view calls publish `deep-ui-views` data on their turn…
-  step('views definition', () => ctx.effect(() => ctx.uiConversation.events.register(viewsDefinition), 'deep-ui: views definition'))
+  // Successful show_view calls publish `deep-view-views` data on their turn…
+  step('views definition', () => ctx.effect(() => ctx.uiConversation.events.register(viewsDefinition), 'deep-view: views definition'))
   // …and the tail under the turn's closing message draws them.
   step('turn tail', () => ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
     name: 'conversation.chat.turnTail',
-    id: 'deep-ui-views',
+    id: 'deep-view-views',
     locale: NS,
   }, withUi(ViewsTail))))
 
@@ -99,7 +99,7 @@ export function apply(ctx) {
   step('user text rule', () => ctx.uiConversation.userText.register(viewReplyRule))
   step('user text node', () => ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
     name: 'conversation.user.text.node',
-    key: 'deep-ui-view-reply',
+    key: 'deep-view-view-reply',
     locale: NS,
   }, withUi(ViewReplyNode))))
 }

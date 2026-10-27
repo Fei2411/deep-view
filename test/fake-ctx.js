@@ -1,4 +1,4 @@
-// The smallest cordis context Deep UI's host half touches.
+// The smallest cordis context Deep View's host half touches.
 export function fakeContext() {
   const registeredTools = new Map()
   const listeners = new Map()

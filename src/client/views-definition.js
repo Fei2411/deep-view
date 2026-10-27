@@ -1,9 +1,9 @@
 // The conversation Definition behind the turn tail: it folds each turn's
 // successful show_view calls — callId plus the raw arguments — into the
-// `deep-ui-views` turn-data value the tail renders. Refused or failed calls
+// `deep-view-views` turn-data value the tail renders. Refused or failed calls
 // contribute nothing, so replay reproduces exactly the views that landed.
 export const viewsDefinition = {
-  kind: 'deep-ui-views',
+  kind: 'deep-view-views',
   match(event) {
     if (event?.type === 'turn/start') return { id: String(event.data?.turn), role: 'start' }
     if (event?.type === 'tool/call' && event.data?.name === 'show_view') return { id: String(event.data?.turn), role: 'update' }
@@ -28,7 +28,7 @@ export const viewsDefinition = {
       const calls = new Map(state.calls)
       // Only a result this plugin answered carries the presentationMeta marker;
       // a same-named call another plugin's scoped tool ran stays undrawn.
-      const mine = event.data?.meta?.owner === 'dsh-deep-ui'
+      const mine = event.data?.meta?.owner === 'deep-view'
       calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true })
       return { ...state, calls }
     }
@@ -37,14 +37,14 @@ export const viewsDefinition = {
   buildLocationData: (context, scope, previous) => {
     if (scope !== 'turn' || context.state === undefined) return null
     const views = [...context.state.calls.values()].filter(call => call.ok === true)
-    if (previous?.kind === 'turn' && previous.turn === context.state.turn && previous.key === 'deep-ui-views'
+    if (previous?.kind === 'turn' && previous.turn === context.state.turn && previous.key === 'deep-view-views'
       && previous.value.views.length === views.length && previous.value.views.every((call, index) => call === views[index])) {
       return previous
     }
     return {
       kind: 'turn',
       turn: context.state.turn,
-      key: 'deep-ui-views',
+      key: 'deep-view-views',
       value: { views },
     }
   },

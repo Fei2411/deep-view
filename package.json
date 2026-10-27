@@ -1,7 +1,7 @@
 {
-  "name": "dsh-deep-ui",
+  "name": "deep-view",
   "version": "0.1.0",
-  "description": "Deep UI: interactive views (charts, tables, inputs, answers) in any DeepSeek Harness chat",
+  "description": "Deep View: interactive views (charts, tables, inputs, answers) in any DeepSeek Harness chat",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
@@ -53,5 +53,13 @@
   },
   "devDependencies": {
     "esbuild": "0.28.2"
+  },
+  "homepage": "https://github.com/Fei2411/deep-view#readme",
+  "bugs": {
+    "url": "https://github.com/Fei2411/deep-view/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fei2411/deep-view.git"
   }
 }

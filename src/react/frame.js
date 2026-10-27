@@ -9,27 +9,27 @@ import { useViewUi } from './ui.js'
 // takes theme colors; it has no way to answer the agent. A frame that navigates
 // away is stopped.
 
-// Read off the page's --dui-* tokens; the frame gets them under the --view-*
+// Read off the page's --dv-* tokens; the frame gets them under the --view-*
 // names the tool description teaches, with the legacy --bt-* names as aliases
 // for blueprints written before the rename.
 const THEME_VARS = [
-  ['--view-ink', '--bt-ink', '--dui-ink'],
-  ['--view-ink-2', '--bt-ink-2', '--dui-ink-2'],
-  ['--view-ink-3', '--bt-ink-3', '--dui-ink-3'],
-  ['--view-line', '--bt-line', '--dui-line'],
-  ['--view-line-2', '--bt-line-2', '--dui-line-2'],
-  ['--view-card', '--bt-card', '--dui-card'],
-  ['--view-main', '--bt-main', '--dui-main'],
-  ['--view-hover', '--bt-hover', '--dui-hover'],
-  ['--view-accent', '--bt-accent', '--dui-accent'],
-  ['--view-accent-ink', '--bt-accent-ink', '--dui-accent-ink'],
-  ['--view-green', '--bt-green', '--dui-green'],
-  ['--view-star', '--bt-star', '--dui-star'],
-  ['--view-danger', '--bt-danger', '--dui-danger'],
+  ['--view-ink', '--bt-ink', '--dv-ink'],
+  ['--view-ink-2', '--bt-ink-2', '--dv-ink-2'],
+  ['--view-ink-3', '--bt-ink-3', '--dv-ink-3'],
+  ['--view-line', '--bt-line', '--dv-line'],
+  ['--view-line-2', '--bt-line-2', '--dv-line-2'],
+  ['--view-card', '--bt-card', '--dv-card'],
+  ['--view-main', '--bt-main', '--dv-main'],
+  ['--view-hover', '--bt-hover', '--dv-hover'],
+  ['--view-accent', '--bt-accent', '--dv-accent'],
+  ['--view-accent-ink', '--bt-accent-ink', '--dv-accent-ink'],
+  ['--view-green', '--bt-green', '--dv-green'],
+  ['--view-star', '--bt-star', '--dv-star'],
+  ['--view-danger', '--bt-danger', '--dv-danger'],
 ]
 export const FRAME_POLICY = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'"
-const HEIGHT = 'dui-view-height'
-const THEME = 'dui-view-theme'
+const HEIGHT = 'dv-view-height'
+const THEME = 'dv-view-theme'
 const MIN_HEIGHT = 24
 
 export function themeVars() {
@@ -82,9 +82,9 @@ export function HtmlFrame({ node }) {
     observer?.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style', 'class'] })
     return () => { window.removeEventListener('message', onMessage); observer?.disconnect() }
   }, [])
-  if (stopped) return h('p', { className: 'dui-view-frame-stopped' }, ui.t('This view tried to open a page and was stopped.'))
+  if (stopped) return h('p', { className: 'dv-view-frame-stopped' }, ui.t('This view tried to open a page and was stopped.'))
   return h('iframe', {
-    ref: frame, className: 'dui-view-frame', title: String(node.summary ?? ''),
+    ref: frame, className: 'dv-view-frame', title: String(node.summary ?? ''),
     sandbox: 'allow-scripts', srcDoc: doc, referrerPolicy: 'no-referrer',
     style: { height: `${height}px` },
     onLoad: () => { loads.current += 1; if (loads.current > 1) setStopped(true) },
@@ -92,6 +92,6 @@ export function HtmlFrame({ node }) {
 }
 
 export const HTML_CSS = `
-.dui-view-frame{display:block;width:100%;border:0;background:transparent}
-.dui-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dui-ink-2)}
+.dv-view-frame{display:block;width:100%;border:0;background:transparent}
+.dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
 `

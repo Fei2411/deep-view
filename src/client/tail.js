@@ -36,7 +36,7 @@ const SettledView = ({ replyText }) => {
   if (view === undefined || view?.view === undefined) return null
   const answers = Array.isArray(payload.answers) ? payload.answers : []
   const answer = answers.find(entry => entry?.id === view.id) ?? answers[0] ?? null
-  return h('div', { className: 'dui-q-inline' }, h(WidgetCard, { title: view.title ?? '', view: view.view, settled: true, answer }))
+  return h('div', { className: 'dv-q-inline' }, h(WidgetCard, { title: view.title ?? '', view: view.view, settled: true, answer }))
 }
 
 // The live card while the host waits for the answer. It re-reads the pending
@@ -64,7 +64,7 @@ const InteractiveView = ({ callId, sessionId, useConversation }) => {
   }
   const onSubmit = (action, values) => run(() => call('reply', { sessionId, viewId: record.id, action, values }))
   const onDismiss = () => run(() => call('dismiss', { sessionId }))
-  return h('div', { className: 'dui-q-inline' }, h(WidgetCard, { title: record.title ?? '', view: record.view, onSubmit, onDismiss, busy: flying === true }))
+  return h('div', { className: 'dv-q-inline' }, h(WidgetCard, { title: record.title ?? '', view: record.view, onSubmit, onDismiss, busy: flying === true }))
 }
 
 const TailView = ({ call, sessionId, useConversation }) => {
@@ -76,11 +76,11 @@ const TailView = ({ call, sessionId, useConversation }) => {
   if (shown.interactive || call.args?.await_reply === true) {
     return h(InteractiveView, { callId: call.callId, sessionId, useConversation })
   }
-  return h('div', { className: 'dui-q-inline' }, h(WidgetCard, { title: shown.title, view: shown.view }))
+  return h('div', { className: 'dv-q-inline' }, h(WidgetCard, { title: shown.title, view: shown.view }))
 }
 
 export function ViewsTail({ turn, sessionId, useConversation }) {
-  const source = useMemo(() => turn?.data?.source?.('deep-ui-views'), [turn])
+  const source = useMemo(() => turn?.data?.source?.('deep-view-views'), [turn])
   const data = useSyncExternalStore(source?.subscribe ?? (() => () => {}), () => source?.getSnapshot())
   const views = data?.views ?? []
   if (views.length === 0) return null

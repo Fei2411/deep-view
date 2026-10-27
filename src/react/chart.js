@@ -9,7 +9,7 @@ import { asText, resolve } from '../core/views.js'
 // as CSV, or saves the chart as a PNG. Colors come from the theme only.
 
 // The first series takes the accent; the rest take the team inks.
-const PALETTE = ['var(--dui-accent)', 'var(--dui-ink-tangerine)', 'var(--dui-ink-green)', 'var(--dui-ink-violet)', 'var(--dui-ink-sky)', 'var(--dui-ink-rose)', 'var(--dui-ink-yellow)', 'var(--dui-ink-cyan)', 'var(--dui-ink-magenta)']
+const PALETTE = ['var(--dv-accent)', 'var(--dv-ink-tangerine)', 'var(--dv-ink-green)', 'var(--dv-ink-violet)', 'var(--dv-ink-sky)', 'var(--dv-ink-rose)', 'var(--dv-ink-yellow)', 'var(--dv-ink-cyan)', 'var(--dv-ink-magenta)']
 const colorAt = index => PALETTE[index % PALETTE.length]
 const TICK = 10
 const LABEL = 11
@@ -96,13 +96,13 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
   const band = plot.w / categories.length
   const parts = []
   for (const tick of ticks) {
-    parts.push(h('line', { key: `g${tick}`, className: 'dui-chart-grid', x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick) }))
-    parts.push(h('text', { key: `t${tick}`, className: 'dui-chart-tick', x: plot.x - 8, y: y(tick) + 3, textAnchor: 'end' }, withUnit(tick, unit)))
+    parts.push(h('line', { key: `g${tick}`, className: 'dv-chart-grid', x1: plot.x, x2: plot.x + plot.w, y1: y(tick), y2: y(tick) }))
+    parts.push(h('text', { key: `t${tick}`, className: 'dv-chart-tick', x: plot.x - 8, y: y(tick) + 3, textAnchor: 'end' }, withUnit(tick, unit)))
   }
   const points = []
   categories.forEach((label, at) => {
     const cx = plot.x + band * at + band / 2
-    parts.push(h('text', { key: `c${at}`, className: 'dui-chart-label', x: cx, y: height - 7, textAnchor: 'middle' }, fit(label, band - 4, LABEL)))
+    parts.push(h('text', { key: `c${at}`, className: 'dv-chart-label', x: cx, y: height - 7, textAnchor: 'middle' }, fit(label, band - 4, LABEL)))
     points.push({ x: cx, y: y(Math.max(...visible.map(item => item.values[at]), lo)) })
   })
   if (kind === 'bar') {
@@ -121,7 +121,7 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
         const d = up
           ? `M${x},${top2 + tall}V${top2 + r}q0,-${r} ${r},-${r}h${barW - 2 * r}q${r},0 ${r},${r}V${top2 + tall}z`
           : `M${x},${top2}V${top2 + tall - r}q0,${r} ${r},${r}h${barW - 2 * r}q${r},0 ${r},-${r}V${top2}z`
-        parts.push(h('path', { key: `b${at}-${row}`, className: 'dui-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, d, style: { fill: item.color } }))
+        parts.push(h('path', { key: `b${at}-${row}`, className: 'dv-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, d, style: { fill: item.color } }))
       })
     })
   } else {
@@ -130,14 +130,14 @@ function columns({ categories, series, unit, kind }, width, active, shown) {
       const line = item.values.map((value, at) => `${at === 0 ? 'M' : 'L'}${xs[at]},${y(value)}`).join('')
       if (kind === 'area') {
         const base = y(Math.max(lo, Math.min(0, hi)))
-        parts.push(h('path', { key: `a${row}`, className: 'dui-chart-area', d: `${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`, style: { fill: item.color } }))
+        parts.push(h('path', { key: `a${row}`, className: 'dv-chart-area', d: `${line}L${xs.at(-1)},${base}L${xs[0]},${base}z`, style: { fill: item.color } }))
       }
-      parts.push(h('path', { key: `l${row}`, className: 'dui-chart-line', d: line, style: { stroke: item.color } }))
+      parts.push(h('path', { key: `l${row}`, className: 'dv-chart-line', d: line, style: { stroke: item.color } }))
       item.values.forEach((value, at) => {
-        parts.push(h('circle', { key: `p${row}-${at}`, className: 'dui-chart-dot', cx: xs[at], cy: y(value), r: active === at ? 4 : 2.5, style: { fill: item.color } }))
+        parts.push(h('circle', { key: `p${row}-${at}`, className: 'dv-chart-dot', cx: xs[at], cy: y(value), r: active === at ? 4 : 2.5, style: { fill: item.color } }))
       })
     })
-    if (active !== null) parts.unshift(h('line', { key: 'guide', className: 'dui-chart-guide', x1: xs[active], x2: xs[active], y1: plot.y, y2: plot.y + plot.h }))
+    if (active !== null) parts.unshift(h('line', { key: 'guide', className: 'dv-chart-guide', x1: xs[active], x2: xs[active], y1: plot.y, y2: plot.y + plot.h }))
   }
   const hits = categories.map((_, at) => ({ x: plot.x + band * at, y: plot.y, w: band, h: plot.h }))
   return { parts, height, points, hits }
@@ -158,21 +158,21 @@ function rows({ categories, series, unit }, width, active, shown) {
   const x = value => plot.x + ((value - lo) / (hi - lo)) * plot.w
   const parts = []
   for (const tick of ticks) {
-    parts.push(h('line', { key: `g${tick}`, className: 'dui-chart-grid', x1: x(tick), x2: x(tick), y1: plot.y, y2: plot.y + plot.h }))
-    parts.push(h('text', { key: `t${tick}`, className: 'dui-chart-tick', x: x(tick), y: height - 6, textAnchor: 'middle' }, withUnit(tick, unit)))
+    parts.push(h('line', { key: `g${tick}`, className: 'dv-chart-grid', x1: x(tick), x2: x(tick), y1: plot.y, y2: plot.y + plot.h }))
+    parts.push(h('text', { key: `t${tick}`, className: 'dv-chart-tick', x: x(tick), y: height - 6, textAnchor: 'middle' }, withUnit(tick, unit)))
   }
   const points = []
   const zero = x(Math.max(lo, Math.min(0, hi)))
   categories.forEach((label, at) => {
     const rowY = plot.y + rowH * at + 5
-    parts.push(h('text', { key: `c${at}`, className: 'dui-chart-label', x: labelW - 10, y: rowY + (rowH - 10) / 2 + 4, textAnchor: 'end' }, fit(label, labelW - 12, LABEL)))
+    parts.push(h('text', { key: `c${at}`, className: 'dv-chart-label', x: labelW - 10, y: rowY + (rowH - 10) / 2 + 4, textAnchor: 'end' }, fit(label, labelW - 12, LABEL)))
     visible.forEach((item, row) => {
       const value = item.values[at]
       const by = rowY + row * (barH + 2)
       const left = Math.min(x(value), zero)
       const long = Math.max(1, Math.abs(x(value) - zero))
-      parts.push(h('rect', { key: `b${at}-${row}`, className: 'dui-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, x: left, y: by, width: long, height: barH, rx: Math.min(4, long / 2), style: { fill: item.color } }))
-      parts.push(h('text', { key: `v${at}-${row}`, className: 'dui-chart-value', x: left + long + 6, y: by + barH - 3 }, withUnit(value, unit)))
+      parts.push(h('rect', { key: `b${at}-${row}`, className: 'dv-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, x: left, y: by, width: long, height: barH, rx: Math.min(4, long / 2), style: { fill: item.color } }))
+      parts.push(h('text', { key: `v${at}-${row}`, className: 'dv-chart-value', x: left + long + 6, y: by + barH - 3 }, withUnit(value, unit)))
     })
     points.push({ x: Math.max(...visible.map(item => x(item.values[at])), zero), y: rowY })
   })
@@ -203,7 +203,7 @@ function donut({ categories, series }, width, active, hover) {
       const d = full
         ? `M${p(r, angle)}A${r},${r} 0 1 1 ${p(r, angle + Math.PI)}A${r},${r} 0 1 1 ${p(r, angle)}M${p(inner, angle)}A${inner},${inner} 0 1 0 ${p(inner, angle + Math.PI)}A${inner},${inner} 0 1 0 ${p(inner, angle)}z`
         : `M${p(r, angle)}A${r},${r} 0 ${large} 1 ${p(r, end)}L${p(inner, end)}A${inner},${inner} 0 ${large} 0 ${p(inner, angle)}z`
-      parts.push(h('path', { key: `s${at}`, className: 'dui-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, d, fillRule: 'evenodd', style: { fill: colorAt(at) }, onPointerEnter: () => hover(at) }))
+      parts.push(h('path', { key: `s${at}`, className: 'dv-chart-mark', 'data-dim': active !== null && active !== at ? '' : undefined, d, fillRule: 'evenodd', style: { fill: colorAt(at) }, onPointerEnter: () => hover(at) }))
     }
     angle = end
   })
@@ -241,7 +241,7 @@ function saveImage(svg, name) {
   const height = Number(svg.getAttribute('height'))
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
   const page = getComputedStyle(document.body)
-  const background = page.getPropertyValue('--dui-main').trim() || page.backgroundColor
+  const background = page.getPropertyValue('--dv-main').trim() || page.backgroundColor
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }))
   const image = new Image()
   image.onload = () => {
@@ -276,12 +276,12 @@ export function ChartTable({ data }) {
   const ui = useViewUi()
   const { categories, series, unit } = data
   const heads = series.map((item, index) => item.name || (series.length === 1 ? unit || ui.t('Value') : `${ui.t('Series')} ${index + 1}`))
-  return h('div', { className: 'dui-widget-table' },
+  return h('div', { className: 'dv-widget-table' },
     h('table', null,
-      h('thead', null, h('tr', null, h('th', { scope: 'col' }), heads.map((head, index) => h('th', { key: index, scope: 'col', className: 'dui-num' }, head)))),
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }), heads.map((head, index) => h('th', { key: index, scope: 'col', className: 'dv-num' }, head)))),
       h('tbody', null, categories.map((label, at) => h('tr', { key: at },
         h('th', { scope: 'row' }, label),
-        series.map((item, index) => h('td', { key: index, className: 'dui-num' }, withUnit(item.values[at], series.length === 1 && !item.name ? '' : unit))))))))
+        series.map((item, index) => h('td', { key: index, className: 'dv-num' }, withUnit(item.values[at], series.length === 1 && !item.name ? '' : unit))))))))
 }
 
 export function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
@@ -342,80 +342,80 @@ export function WidgetChart({ node, lookup, registerChart, refreshCharts }) {
   // touching the registration order.
   useEffect(() => refreshCharts?.(), [refreshCharts, asTable, menuLabel])
   const legend = isDonut
-    ? h('div', { className: 'dui-chart-legend dui-chart-legend-list' }, categories.map((name, at) => h('div', {
-      key: at, className: 'dui-chart-key', 'data-dim': active !== null && active !== at ? '' : undefined,
+    ? h('div', { className: 'dv-chart-legend dv-chart-legend-list' }, categories.map((name, at) => h('div', {
+      key: at, className: 'dv-chart-key', 'data-dim': active !== null && active !== at ? '' : undefined,
       onPointerEnter: () => setActive(at), onPointerLeave: () => setActive(null),
-    }, h('i', { style: { background: colorAt(at) } }), h('span', { className: 'dui-chart-key-name' }, name),
-    h('span', { className: 'dui-chart-key-value' }, share(at)))))
-    : series.length > 1 ? h('div', { className: 'dui-chart-legend' }, series.map((item, index) => h('button', {
-      key: index, type: 'button', className: 'dui-chart-key', 'aria-pressed': shown[index], onClick: () => toggle(index),
+    }, h('i', { style: { background: colorAt(at) } }), h('span', { className: 'dv-chart-key-name' }, name),
+    h('span', { className: 'dv-chart-key-value' }, share(at)))))
+    : series.length > 1 ? h('div', { className: 'dv-chart-legend' }, series.map((item, index) => h('button', {
+      key: index, type: 'button', className: 'dv-chart-key', 'aria-pressed': shown[index], onClick: () => toggle(index),
     }, h('i', { style: { background: item.color } }), item.name || `${ui.t('Series')} ${index + 1}`))) : null
-  const plot = h('div', { className: 'dui-chart-plot', style: isDonut ? { width: svgWidth } : undefined },
+  const plot = h('div', { className: 'dv-chart-plot', style: isDonut ? { width: svgWidth } : undefined },
     h('svg', {
-      ref: svg, className: 'dui-chart-svg', width: svgWidth, height: drawn.height, viewBox: `0 0 ${svgWidth} ${drawn.height}`,
+      ref: svg, className: 'dv-chart-svg', width: svgWidth, height: drawn.height, viewBox: `0 0 ${svgWidth} ${drawn.height}`,
       role: 'img', 'aria-labelledby': labelId, tabIndex: 0,
       onKeyDown: move, onBlur: () => setActive(null), onPointerLeave: () => setActive(null),
     },
     drawn.parts,
     isDonut
       ? (active === null
-        ? h('text', { className: 'dui-chart-center', x: svgWidth / 2, y: drawn.height / 2 + 5, textAnchor: 'middle' }, unit === '%' ? '' : withUnit(drawn.total, unit))
+        ? h('text', { className: 'dv-chart-center', x: svgWidth / 2, y: drawn.height / 2 + 5, textAnchor: 'middle' }, unit === '%' ? '' : withUnit(drawn.total, unit))
         : h(Fragment, null,
-          h('text', { className: 'dui-chart-center-name', x: svgWidth / 2, y: drawn.height / 2 - 4, textAnchor: 'middle' }, fit(categories[active], drawn.size * 0.56, LABEL)),
-          h('text', { className: 'dui-chart-center', x: svgWidth / 2, y: drawn.height / 2 + 14, textAnchor: 'middle' }, share(active))))
-      : drawn.hits.map((hit, at) => h('rect', { key: `h${at}`, className: 'dui-chart-hit', x: hit.x, y: hit.y, width: hit.w, height: hit.h, onPointerEnter: () => setActive(at) }))),
-    point && !asTable && !isDonut ? h('div', { className: 'dui-chart-tip', role: 'status', style: { left: point.x, top: point.y } },
+          h('text', { className: 'dv-chart-center-name', x: svgWidth / 2, y: drawn.height / 2 - 4, textAnchor: 'middle' }, fit(categories[active], drawn.size * 0.56, LABEL)),
+          h('text', { className: 'dv-chart-center', x: svgWidth / 2, y: drawn.height / 2 + 14, textAnchor: 'middle' }, share(active))))
+      : drawn.hits.map((hit, at) => h('rect', { key: `h${at}`, className: 'dv-chart-hit', x: hit.x, y: hit.y, width: hit.w, height: hit.h, onPointerEnter: () => setActive(at) }))),
+    point && !asTable && !isDonut ? h('div', { className: 'dv-chart-tip', role: 'status', style: { left: point.x, top: point.y } },
       h('b', null, categories[active]),
       tipRows.map((row, index) => h('span', { key: index }, h('i', { style: { background: row.color } }), row.name ? `${row.name}  ` : '', row.value))) : null)
   const body = asTable ? h(ChartTable, { data })
-    : isDonut ? h('div', { className: legendBeside ? 'dui-chart-donut dui-chart-donut-beside' : 'dui-chart-donut', onPointerLeave: () => setActive(null) }, plot, legend)
+    : isDonut ? h('div', { className: legendBeside ? 'dv-chart-donut dv-chart-donut-beside' : 'dv-chart-donut', onPointerLeave: () => setActive(null) }, plot, legend)
       : h(Fragment, null, legend, plot)
-  return h('figure', { ref: box, className: 'dui-chart', 'data-kind': kind },
+  return h('figure', { ref: box, className: 'dv-chart', 'data-kind': kind },
     h('span', { id: labelId, hidden: true }, label),
     body,
     // The SVG stays mounted under the table, so the image can still be saved from it.
     asTable ? h('div', { hidden: true }, plot) : null,
-    copied ? h('span', { className: 'dui-chart-copied', role: 'status' }, ui.t('Copied')) : null,
-    typeof node.caption === 'string' && node.caption !== '' ? h('figcaption', { className: 'dui-view-caption' }, node.caption) : null)
+    copied ? h('span', { className: 'dv-chart-copied', role: 'status' }, ui.t('Copied')) : null,
+    typeof node.caption === 'string' && node.caption !== '' ? h('figcaption', { className: 'dv-view-caption' }, node.caption) : null)
 }
 
 export const CHART_CSS = `
-.dui-chart{position:relative;margin:0;min-width:0;display:flex;flex-direction:column;gap:8px}
-.dui-chart-plot{position:relative;min-width:0}
-.dui-chart-svg{display:block;overflow:visible;outline:none;font-family:inherit}
-.dui-chart-svg text{pointer-events:none}
-.dui-chart-svg:focus-visible{outline:2px solid var(--dui-accent);outline-offset:4px;border-radius:4px}
-.dui-chart-grid{stroke:var(--dui-line);stroke-width:1;stroke-dasharray:3 3}
-.dui-chart-tick{font-size:${TICK}px;fill:var(--dui-ink-3);font-variant-numeric:tabular-nums}
-.dui-chart-label{font-size:${LABEL}px;fill:var(--dui-ink-2)}
-.dui-chart-value{font-size:${LABEL}px;fill:var(--dui-ink-2);font-variant-numeric:tabular-nums}
-.dui-chart-center{font-size:15px;font-weight:600;fill:var(--dui-ink);font-variant-numeric:tabular-nums}
-.dui-chart-center-name{font-size:${LABEL}px;fill:var(--dui-ink-2)}
-.dui-chart-mark{transition:opacity .12s ease}
-.dui-chart-mark[data-dim]{opacity:.28}
-.dui-chart-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.dui-chart-area{opacity:.14}
-.dui-chart-dot{transition:r .12s ease}
-.dui-chart-guide{stroke:var(--dui-line-2);stroke-width:1}
-.dui-chart-hit{fill:transparent}
-.dui-chart-tip{position:absolute;z-index:4;pointer-events:none;transform:translate(-50%,calc(-100% - 8px));display:flex;flex-direction:column;gap:2px;padding:6px 10px;border-radius:10px;background:var(--dui-main);border:.5px solid var(--dui-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);font-size:12px;line-height:16px;color:var(--dui-ink);white-space:nowrap;font-variant-numeric:tabular-nums;animation:dui-veil-in .12s ease-out}
-.dui-chart-tip b{font-weight:600}
-.dui-chart-tip span{display:flex;align-items:center;gap:6px;color:var(--dui-ink-2)}
-.dui-chart-tip i,.dui-chart-key i{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round}
-.dui-chart-legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding-right:32px}
-.dui-chart-key{display:inline-flex;align-items:center;gap:6px;min-height:20px;padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:16px;color:var(--dui-ink-2);cursor:pointer;transition:opacity .12s ease}
-.dui-chart-key[aria-pressed=false]{opacity:.4}
-.dui-chart-key:focus-visible{outline:2px solid var(--dui-accent);outline-offset:2px;border-radius:4px}
-.dui-chart-legend-list{flex-direction:column;flex-wrap:nowrap;gap:6px;padding:0;min-width:0}
-.dui-chart-legend-list .dui-chart-key{cursor:default;width:100%}
-.dui-chart-legend-list .dui-chart-key[data-dim]{opacity:.4}
-.dui-chart-key-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dui-ink)}
-.dui-chart-key-value{flex:none;font-variant-numeric:tabular-nums}
-.dui-chart-donut{display:flex;flex-direction:column;align-items:center;gap:12px}
-.dui-chart-donut-beside{flex-direction:row;align-items:center;gap:24px}
-.dui-chart-donut-beside .dui-chart-legend-list{flex:1 1 auto;max-width:280px}
-.dui-chart-copied{position:absolute;top:2px;right:36px;font-size:12px;line-height:16px;color:var(--dui-ink-2);animation:dui-veil-in .16s ease-out}
-.dui-widget-table .dui-num{text-align:end;font-variant-numeric:tabular-nums}
-.dui-widget-table tbody th{padding:6px 10px;font-weight:400;text-align:start;color:var(--dui-ink);border-bottom:0}
-@media (prefers-reduced-motion:reduce){.dui-chart-mark,.dui-chart-dot{transition:none}.dui-chart-tip{animation:none}}
+.dv-chart{position:relative;margin:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+.dv-chart-plot{position:relative;min-width:0}
+.dv-chart-svg{display:block;overflow:visible;outline:none;font-family:inherit}
+.dv-chart-svg text{pointer-events:none}
+.dv-chart-svg:focus-visible{outline:2px solid var(--dv-accent);outline-offset:4px;border-radius:4px}
+.dv-chart-grid{stroke:var(--dv-line);stroke-width:1;stroke-dasharray:3 3}
+.dv-chart-tick{font-size:${TICK}px;fill:var(--dv-ink-3);font-variant-numeric:tabular-nums}
+.dv-chart-label{font-size:${LABEL}px;fill:var(--dv-ink-2)}
+.dv-chart-value{font-size:${LABEL}px;fill:var(--dv-ink-2);font-variant-numeric:tabular-nums}
+.dv-chart-center{font-size:15px;font-weight:600;fill:var(--dv-ink);font-variant-numeric:tabular-nums}
+.dv-chart-center-name{font-size:${LABEL}px;fill:var(--dv-ink-2)}
+.dv-chart-mark{transition:opacity .12s ease}
+.dv-chart-mark[data-dim]{opacity:.28}
+.dv-chart-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dv-chart-area{opacity:.14}
+.dv-chart-dot{transition:r .12s ease}
+.dv-chart-guide{stroke:var(--dv-line-2);stroke-width:1}
+.dv-chart-hit{fill:transparent}
+.dv-chart-tip{position:absolute;z-index:4;pointer-events:none;transform:translate(-50%,calc(-100% - 8px));display:flex;flex-direction:column;gap:2px;padding:6px 10px;border-radius:10px;background:var(--dv-main);border:.5px solid var(--dv-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);font-size:12px;line-height:16px;color:var(--dv-ink);white-space:nowrap;font-variant-numeric:tabular-nums;animation:dv-veil-in .12s ease-out}
+.dv-chart-tip b{font-weight:600}
+.dv-chart-tip span{display:flex;align-items:center;gap:6px;color:var(--dv-ink-2)}
+.dv-chart-tip i,.dv-chart-key i{flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round}
+.dv-chart-legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding-right:32px}
+.dv-chart-key{display:inline-flex;align-items:center;gap:6px;min-height:20px;padding:0;border:0;background:none;font:inherit;font-size:12px;line-height:16px;color:var(--dv-ink-2);cursor:pointer;transition:opacity .12s ease}
+.dv-chart-key[aria-pressed=false]{opacity:.4}
+.dv-chart-key:focus-visible{outline:2px solid var(--dv-accent);outline-offset:2px;border-radius:4px}
+.dv-chart-legend-list{flex-direction:column;flex-wrap:nowrap;gap:6px;padding:0;min-width:0}
+.dv-chart-legend-list .dv-chart-key{cursor:default;width:100%}
+.dv-chart-legend-list .dv-chart-key[data-dim]{opacity:.4}
+.dv-chart-key-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dv-ink)}
+.dv-chart-key-value{flex:none;font-variant-numeric:tabular-nums}
+.dv-chart-donut{display:flex;flex-direction:column;align-items:center;gap:12px}
+.dv-chart-donut-beside{flex-direction:row;align-items:center;gap:24px}
+.dv-chart-donut-beside .dv-chart-legend-list{flex:1 1 auto;max-width:280px}
+.dv-chart-copied{position:absolute;top:2px;right:36px;font-size:12px;line-height:16px;color:var(--dv-ink-2);animation:dv-veil-in .16s ease-out}
+.dv-widget-table .dv-num{text-align:end;font-variant-numeric:tabular-nums}
+.dv-widget-table tbody th{padding:6px 10px;font-weight:400;text-align:start;color:var(--dv-ink);border-bottom:0}
+@media (prefers-reduced-motion:reduce){.dv-chart-mark,.dv-chart-dot{transition:none}.dv-chart-tip{animation:none}}
 `

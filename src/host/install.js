@@ -1,4 +1,4 @@
-// Deep UI's host half: the show_view tool, the pending store, the /api/deep-ui
+// Deep View's host half: the show_view tool, the pending store, the /api/deep-view
 // route the cards answer through, and the user-message revoke.
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
@@ -10,22 +10,22 @@ import { showViewParameters, showViewDescription } from '../core/tool-schema.js'
 import { viewReply } from '../core/reply.js'
 import { createPendingStore } from './pending.js'
 
-export const ROUTE = '/api/deep-ui'
+export const ROUTE = '/api/deep-view'
 
 const output = {
   schema: { type: 'string' },
   render: (args, value) => [{ type: 'text', text: String(value) }],
   // Marks the result so the client only draws the calls this plugin answered:
   // a session where another plugin's scoped show_view ran has no marker.
-  presentationMeta: () => ({ owner: 'dsh-deep-ui' }),
+  presentationMeta: () => ({ owner: 'deep-view' }),
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const ok = value => ({ ok: true, value })
-const fail = (message, code = 'deep-ui/error') => ({ ok: false, error: { code, message, details: {} } })
+const fail = (message, code = 'deep-view/error') => ({ ok: false, error: { code, message, details: {} } })
 
 export function install(ctx, config = {}) {
-  const home = config.home ?? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'deep-ui')
+  const home = config.home ?? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'deep-view')
   const pending = createPendingStore(home)
 
   // Interactive views ask a human, so only the live runtime root may open one —
@@ -74,11 +74,11 @@ export function install(ctx, config = {}) {
   })
   // An older ds-bot registers show_view globally too; duplicates in one layer
   // throw, and an uncaught throw keeps the whole plugin from activating. Then
-  // Deep UI's tool stays off — its tail and replies only fold marked calls.
+  // Deep View's tool stays off — its tail and replies only fold marked calls.
   try {
     ctx.tools.register(showViewTool)
   } catch (error) {
-    ctx.logger?.warn('deep-ui: another plugin already provides show_view globally; Deep UI\'s tool is off. (%s)', error?.message ?? error)
+    ctx.logger?.warn('deep-view: another plugin already provides show_view globally; Deep View\'s tool is off. (%s)', error?.message ?? error)
   }
 
   // Any user message or card answer admitted into a session drops its pending
@@ -99,17 +99,17 @@ export function install(ctx, config = {}) {
           return ok(sessionId === undefined ? null : (pending.get(sessionId) ?? null))
 
         case 'dismiss':
-          if (sessionId === undefined) return fail('Nothing to dismiss', 'deep-ui/invalid')
+          if (sessionId === undefined) return fail('Nothing to dismiss', 'deep-view/invalid')
           await pending.drop(sessionId)
           return ok(true)
         case 'reply': {
-          if (sessionId === undefined) return fail('Nothing to send', 'deep-ui/invalid')
+          if (sessionId === undefined) return fail('Nothing to send', 'deep-view/invalid')
           const record = pending.get(sessionId)
-          if (record === undefined || record.id !== body.viewId) return fail('This view is no longer open', 'deep-ui/stale')
+          if (record === undefined || record.id !== body.viewId) return fail('This view is no longer open', 'deep-view/stale')
           const checked = validateViewAnswer(record.view, body.action, body.values)
-          if (checked.error !== undefined) return fail(checked.error, 'deep-ui/invalid')
+          if (checked.error !== undefined) return fail(checked.error, 'deep-view/invalid')
           const reply = viewReply(record, body.action, body.values, 'user')
-          if (reply === undefined) return fail('Nothing to send', 'deep-ui/invalid')
+          if (reply === undefined) return fail('Nothing to send', 'deep-view/invalid')
           // Claim the view before queueing so a second answer is refused.
           await pending.drop(sessionId)
           try {
@@ -124,10 +124,10 @@ export function install(ctx, config = {}) {
           return ok(true)
         }
         default:
-          return fail(`Unknown op ${op}`, 'deep-ui/not-found')
+          return fail(`Unknown op ${op}`, 'deep-view/not-found')
       }
     } catch (error) {
-      return fail(error?.message ?? String(error), 'deep-ui/internal')
+      return fail(error?.message ?? String(error), 'deep-view/internal')
     }
   }
 
@@ -143,5 +143,5 @@ export function install(ctx, config = {}) {
       const result = await handle(String(body?.op ?? ''), isRecord(body) ? body : {})
       return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } })
     },
-  }), 'deep-ui: api route')
+  }), 'deep-view: api route')
 }

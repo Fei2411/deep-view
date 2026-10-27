@@ -37,7 +37,7 @@ export async function bundleClient() {
   return [
     '// Generated from src/client by `npm run build` (scripts/build-client.mjs). Do not edit by hand.',
     'window.__ModuleLoader__.load({',
-    '  id: \'dsh-deep-ui\',',
+    '  id: \'deep-view\',',
     '  factory: (require) => {',
     'const module = { exports: {} }',
     result.outputFiles[0].text.trimEnd(),
@@ -56,7 +56,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     let current = null
     try { current = readFileSync(OUTPUT, 'utf8') } catch { /* missing counts as stale */ }
     if (current !== next) {
-      console.error('client.js is stale: run `npm run build` in deep-ui and commit the result')
+      console.error('client.js is stale: run `npm run build` in deep-view and commit the result')
       process.exit(1)
     }
   } else {

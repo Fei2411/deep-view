@@ -55,53 +55,53 @@ function OptionsInput({ node, onSubmit, keys, busy = false }) {
   const ownRef = useRef(null)
   const hints = useOptionKeys(busy || !keys ? 0 : options.length, index => choose(options[index].label), ownRef)
   return h(Fragment, null,
-    h('div', { className: 'dui-q-list', role: 'group' }, options.map((option, index) => {
+    h('div', { className: 'dv-q-list', role: 'group' }, options.map((option, index) => {
       const selected = multi && picked.includes(option.label)
       return h('button', {
-        key: option.label, type: 'button', className: 'dui-q-opt', disabled: busy,
+        key: option.label, type: 'button', className: 'dv-q-opt', disabled: busy,
         'aria-pressed': multi ? selected : undefined,
         'aria-keyshortcuts': hints ? keyLetter(index).toLowerCase() : undefined,
         onClick: () => choose(option.label),
       },
-      hints ? h('span', { className: 'dui-key', 'aria-hidden': true }, keyLetter(index)) : null,
-      h('span', { className: 'dui-q-body' },
-        h('span', { className: 'dui-q-label' }, option.label),
-        option.description ? h('span', { className: 'dui-q-desc' }, option.description) : null),
-      selected ? h('span', { className: 'dui-q-check', title: ui.t('Selected') }, h(CheckIcon)) : null)
+      hints ? h('span', { className: 'dv-key', 'aria-hidden': true }, keyLetter(index)) : null,
+      h('span', { className: 'dv-q-body' },
+        h('span', { className: 'dv-q-label' }, option.label),
+        option.description ? h('span', { className: 'dv-q-desc' }, option.description) : null),
+      selected ? h('span', { className: 'dv-q-check', title: ui.t('Selected') }, h(CheckIcon)) : null)
     })),
-    multi ? h('div', { className: 'dui-q-foot' },
-      h('button', { type: 'button', className: 'dui-q-submit', disabled: busy || picked.length === 0, onClick: submit }, ui.t('Submit'))) : null)
+    multi ? h('div', { className: 'dv-q-foot' },
+      h('button', { type: 'button', className: 'dv-q-submit', disabled: busy || picked.length === 0, onClick: submit }, ui.t('Submit'))) : null)
 }
 
 function SettledOptions({ node, answer }) {
   const ui = useViewUi()
   const selected = answerValues(answer, node)?.selected
   const chosen = Array.isArray(selected) ? selected : []
-  return h('div', { className: 'dui-q-list', role: 'group', 'aria-label': ui.t('Your answer') },
-    optionsOf(node).map(option => h('div', { key: option.label, className: 'dui-q-opt' },
-      h('span', { className: 'dui-q-body' },
-        h('span', { className: 'dui-q-label' }, option.label),
-        option.description ? h('span', { className: 'dui-q-desc' }, option.description) : null),
-      chosen.includes(option.label) ? h('span', { className: 'dui-q-check', title: ui.t('Selected') }, h(CheckIcon)) : null)))
+  return h('div', { className: 'dv-q-list', role: 'group', 'aria-label': ui.t('Your answer') },
+    optionsOf(node).map(option => h('div', { key: option.label, className: 'dv-q-opt' },
+      h('span', { className: 'dv-q-body' },
+        h('span', { className: 'dv-q-label' }, option.label),
+        option.description ? h('span', { className: 'dv-q-desc' }, option.description) : null),
+      chosen.includes(option.label) ? h('span', { className: 'dv-q-check', title: ui.t('Selected') }, h(CheckIcon)) : null)))
 }
 
 function ConfirmInput({ node, onSubmit, busy = false }) {
   const ui = useViewUi()
-  return h('div', { className: 'dui-q-foot' },
-    h('button', { type: 'button', className: 'dui-q-btn', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t('Cancel')),
-    h('button', { type: 'button', className: 'dui-q-submit', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t('Confirm')))
+  return h('div', { className: 'dv-q-foot' },
+    h('button', { type: 'button', className: 'dv-q-btn', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t('Cancel')),
+    h('button', { type: 'button', className: 'dv-q-submit', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t('Confirm')))
 }
 
 function SettledConfirm({ node, answer }) {
   const ui = useViewUi()
   const confirmed = answerValues(answer, node)?.confirmed
   if (confirmed !== true && confirmed !== false) {
-    return h('div', { className: 'dui-q-foot' },
-      h('button', { type: 'button', className: 'dui-q-btn', disabled: true }, node.cancelLabel ?? ui.t('Cancel')),
-      h('button', { type: 'button', className: 'dui-q-submit', disabled: true }, node.confirmLabel ?? ui.t('Confirm')))
+    return h('div', { className: 'dv-q-foot' },
+      h('button', { type: 'button', className: 'dv-q-btn', disabled: true }, node.cancelLabel ?? ui.t('Cancel')),
+      h('button', { type: 'button', className: 'dv-q-submit', disabled: true }, node.confirmLabel ?? ui.t('Confirm')))
   }
   const label = confirmed ? (node.confirmLabel ?? ui.t('Confirm')) : (node.cancelLabel ?? ui.t('Cancel'))
-  return h('span', { className: 'dui-q-badge' }, label)
+  return h('span', { className: 'dv-q-badge' }, label)
 }
 
 function FormInput({ node, onSubmit, busy = false }) {
@@ -110,14 +110,14 @@ function FormInput({ node, onSubmit, busy = false }) {
   const [draft, setDraft] = useState({})
   const submit = () => { if (!busy) onSubmit?.(node.id, { fields: Object.fromEntries(fields.map(field => [field.id, draft[field.id] ?? ''])) }) }
   return h('form', {
-    className: 'dui-widget-form',
+    className: 'dv-widget-form',
     onSubmit: (event) => { event.preventDefault(); submit() },
   },
-  fields.map(field => h('label', { key: field.id, className: 'dui-widget-field' },
-    h('span', { className: 'dui-widget-field-label' }, field.label),
-    h('span', { className: 'dui-q-field' },
+  fields.map(field => h('label', { key: field.id, className: 'dv-widget-field' },
+    h('span', { className: 'dv-widget-field-label' }, field.label),
+    h('span', { className: 'dv-q-field' },
       h('input', {
-        className: 'dui-q-input', type: 'text', value: draft[field.id] ?? '',
+        className: 'dv-q-input', type: 'text', value: draft[field.id] ?? '',
         autoComplete: 'off', spellCheck: false, readOnly: busy,
         'aria-label': field.label, placeholder: field.placeholder ?? undefined,
         onChange: (event) => { if (!busy) setDraft(current => ({ ...current, [field.id]: event.target.value })) },
@@ -127,24 +127,24 @@ function FormInput({ node, onSubmit, busy = false }) {
           submit()
         },
       })))),
-  h('div', { className: 'dui-q-foot' }, h('button', { type: 'submit', className: 'dui-q-submit', disabled: busy }, node.submitLabel ?? ui.t('Submit'))))
+  h('div', { className: 'dv-q-foot' }, h('button', { type: 'submit', className: 'dv-q-submit', disabled: busy }, node.submitLabel ?? ui.t('Submit'))))
 }
 
 function SettledForm({ node, answer }) {
   const fields = answerValues(answer, node)?.fields
   const values = fields !== null && typeof fields === 'object' ? fields : {}
-  return h('div', { className: 'dui-widget-form' },
-    fieldsOf(node).map(field => h('label', { key: field.id, className: 'dui-widget-field' },
-      h('span', { className: 'dui-widget-field-label' }, field.label),
-      h('span', { className: 'dui-q-field' },
-        h('input', { className: 'dui-q-input', type: 'text', value: values[field.id] ?? '', disabled: true, readOnly: true, 'aria-label': field.label })))))
+  return h('div', { className: 'dv-widget-form' },
+    fieldsOf(node).map(field => h('label', { key: field.id, className: 'dv-widget-field' },
+      h('span', { className: 'dv-widget-field-label' }, field.label),
+      h('span', { className: 'dv-q-field' },
+        h('input', { className: 'dv-q-input', type: 'text', value: values[field.id] ?? '', disabled: true, readOnly: true, 'aria-label': field.label })))))
 }
 
 function SubmitInput({ node, ctx }) {
   const ui = useViewUi()
   if (ctx.settled) return null
-  return h('div', { className: 'dui-q-foot' },
-    h('button', { type: 'button', className: 'dui-q-submit', disabled: ctx.busy, onClick: () => ctx.onSubmit?.(node.id, {}) }, node.label || ui.t('Send')))
+  return h('div', { className: 'dv-q-foot' },
+    h('button', { type: 'button', className: 'dv-q-submit', disabled: ctx.busy, onClick: () => ctx.onSubmit?.(node.id, {}) }, node.label || ui.t('Send')))
 }
 
 function WidgetTable({ node, lookup }) {
@@ -155,11 +155,11 @@ function WidgetTable({ node, lookup }) {
     const cells = rows.map(row => row[index]).filter(cell => cell !== undefined && cell !== '')
     return cells.length > 0 && cells.every(cell => typeof cell === 'number' || (typeof cell === 'string' && NUMERIC_CELL.test(cell.trim())))
   })
-  return h('div', { className: 'dui-widget-table' },
+  return h('div', { className: 'dv-widget-table' },
     h('table', null,
-      h('thead', null, h('tr', null, columns.map((column, index) => h('th', { key: column.key ?? index, scope: 'col', className: numeric[index] ? 'dui-num' : undefined }, column.label)))),
+      h('thead', null, h('tr', null, columns.map((column, index) => h('th', { key: column.key ?? index, scope: 'col', className: numeric[index] ? 'dv-num' : undefined }, column.label)))),
       h('tbody', null, rows.map((row, rowIndex) => h('tr', { key: rowIndex },
-        columns.map((column, columnIndex) => h('td', { key: column.key ?? columnIndex, className: numeric[columnIndex] ? 'dui-num' : undefined }, cellText(row[columnIndex]))))))))
+        columns.map((column, columnIndex) => h('td', { key: column.key ?? columnIndex, className: numeric[columnIndex] ? 'dv-num' : undefined }, cellText(row[columnIndex]))))))))
 }
 
 function WidgetProgress({ node, lookup }) {
@@ -173,29 +173,29 @@ function WidgetProgress({ node, lookup }) {
   percent = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0))
   const tone = resolve(node.tone, lookup)
   const right = node.valueLabel !== undefined ? asText(resolve(node.valueLabel, lookup, '')) : `${Math.round(percent)}%`
-  return h('div', { className: 'dui-widget-progress', 'data-tone': TONES.includes(tone) ? tone : undefined },
-    h('span', { className: 'dui-widget-progress-label' }, h('span', { className: 'dui-widget-progress-name' }, node.label), h('span', null, right)),
+  return h('div', { className: 'dv-widget-progress', 'data-tone': TONES.includes(tone) ? tone : undefined },
+    h('span', { className: 'dv-widget-progress-label' }, h('span', { className: 'dv-widget-progress-name' }, node.label), h('span', null, right)),
     h('div', {
-      className: 'dui-widget-progress-track', role: 'progressbar',
+      className: 'dv-widget-progress-track', role: 'progressbar',
       'aria-valuenow': Math.round(percent), 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': node.label ?? ui.t('Progress'), 'aria-valuetext': right,
-    }, h('div', { className: 'dui-widget-progress-fill', style: { width: `${percent}%` } })))
+    }, h('div', { className: 'dv-widget-progress-fill', style: { width: `${percent}%` } })))
 }
 
 function WidgetMetric({ node, lookup }) {
   const tone = resolve(node.tone, lookup)
   const caption = node.caption === undefined ? '' : asText(resolve(node.caption, lookup, ''))
-  return h('div', { className: 'dui-widget-metric', 'data-tone': TONES.includes(tone) ? tone : undefined },
-    h('span', { className: 'dui-widget-metric-label' }, node.label),
-    h('span', { className: 'dui-widget-metric-value' }, asText(resolve(node.value, lookup, '—'))),
-    caption !== '' ? h('span', { className: 'dui-view-caption' }, caption) : null)
+  return h('div', { className: 'dv-widget-metric', 'data-tone': TONES.includes(tone) ? tone : undefined },
+    h('span', { className: 'dv-widget-metric-label' }, node.label),
+    h('span', { className: 'dv-widget-metric-value' }, asText(resolve(node.value, lookup, '—'))),
+    caption !== '' ? h('span', { className: 'dv-view-caption' }, caption) : null)
 }
 
 function WidgetCallout({ node, lookup }) {
   const ui = useViewUi()
   const tone = resolve(node.tone, lookup)
-  return h('div', { className: 'dui-view-callout', 'data-tone': CALLOUT_TONES.includes(tone) ? tone : 'info' },
-    h('span', { className: 'dui-view-callout-icon', 'aria-hidden': true }, h(InfoIcon)),
-    h('div', { className: 'dui-view-callout-text' }, h(ui.Markdown, { text: asText(resolve(node.text, lookup, '')), labels: mdLabels(ui), variant: 'compact' })))
+  return h('div', { className: 'dv-view-callout', 'data-tone': CALLOUT_TONES.includes(tone) ? tone : 'info' },
+    h('span', { className: 'dv-view-callout-icon', 'aria-hidden': true }, h(InfoIcon)),
+    h('div', { className: 'dv-view-callout-text' }, h(ui.Markdown, { text: asText(resolve(node.text, lookup, '')), labels: mdLabels(ui), variant: 'compact' })))
 }
 
 const LinkIcon = () => h('svg', { width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
@@ -204,17 +204,17 @@ const LinkIcon = () => h('svg', { width: 12, height: 12, viewBox: '0 0 20 20', f
 function WidgetSources({ node }) {
   const ui = useViewUi()
   const items = (Array.isArray(node.items) ? node.items : []).filter(item => typeof item?.url === 'string' && /^https?:\/\//i.test(item.url))
-  return h('div', { className: 'dui-view-sources', role: 'list', 'aria-label': ui.t('Sources') },
-    items.map((item, index) => h('a', { key: index, role: 'listitem', className: 'dui-view-source', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: item.url }, h(LinkIcon), item.label)))
+  return h('div', { className: 'dv-view-sources', role: 'list', 'aria-label': ui.t('Sources') },
+    items.map((item, index) => h('a', { key: index, role: 'listitem', className: 'dv-view-source', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: item.url }, h(LinkIcon), item.label)))
 }
 
 // -------------------------------------------------------------------------
 // Inputs. Their values stay in the page; formulas read them on every change.
 
 function InputHead({ id, label, value }) {
-  return h('div', { className: 'dui-view-input-head' },
-    h('label', { htmlFor: id, className: 'dui-view-input-label' }, label),
-    value !== undefined ? h('output', { htmlFor: id, className: 'dui-view-input-value' }, value) : null)
+  return h('div', { className: 'dv-view-input-head' },
+    h('label', { htmlFor: id, className: 'dv-view-input-label' }, label),
+    value !== undefined ? h('output', { htmlFor: id, className: 'dv-view-input-value' }, value) : null)
 }
 
 const withUnit = (value, unit) => `${asText(value)}${unit ? ` ${unit}` : ''}`
@@ -224,11 +224,11 @@ function SliderInput({ node, ctx }) {
   const id = useId()
   const value = Number(ctx.values[node.id])
   const percent = node.max > node.min ? ((value - node.min) / (node.max - node.min)) * 100 : 0
-  return h('div', { className: 'dui-view-input' },
+  return h('div', { className: 'dv-view-input' },
     h(InputHead, { id, label: node.label, value: withUnit(grouped(value), node.unit) }),
     h('input', {
-      id, type: 'range', className: 'dui-view-range', min: node.min, max: node.max, step: node.step ?? 'any', value,
-      disabled: ctx.locked, style: { '--dui-fill': `${percent}%` },
+      id, type: 'range', className: 'dv-view-range', min: node.min, max: node.max, step: node.step ?? 'any', value,
+      disabled: ctx.locked, style: { '--dv-fill': `${percent}%` },
       onChange: event => ctx.setInput(node.id, Number(event.target.value)),
     }))
 }
@@ -244,15 +244,15 @@ function NumberInput({ node, ctx }) {
     if ((node.min !== undefined && next < node.min) || (node.max !== undefined && next > node.max)) return
     ctx.setInput(node.id, next)
   }
-  return h('div', { className: 'dui-view-input' },
+  return h('div', { className: 'dv-view-input' },
     h(InputHead, { id, label: node.label }),
-    h('span', { className: 'dui-q-field dui-view-number' },
+    h('span', { className: 'dv-q-field dv-view-number' },
       h('input', {
-        id, className: 'dui-q-input', type: 'number', inputMode: 'decimal', value: draft ?? asText(value),
+        id, className: 'dv-q-input', type: 'number', inputMode: 'decimal', value: draft ?? asText(value),
         min: node.min, max: node.max, step: node.step ?? 'any', disabled: ctx.locked,
         onChange: event => accept(event.target.value), onBlur: () => setDraft(null),
       }),
-      node.unit ? h('span', { className: 'dui-view-unit' }, node.unit) : null))
+      node.unit ? h('span', { className: 'dv-view-unit' }, node.unit) : null))
 }
 
 // A few short options sit side by side; more, or longer ones, stack as a list.
@@ -262,24 +262,24 @@ function ChoiceInput({ node, ctx }) {
   const current = ctx.values[node.id]
   const side = options.length <= 4 && options.every(option => [...option.label].length <= 14)
   const pick = option => () => { if (!ctx.locked) ctx.setInput(node.id, choiceValue(option)) }
-  return h('div', { className: 'dui-view-input' },
-    h('span', { className: 'dui-view-input-label', id: labelId }, node.label),
+  return h('div', { className: 'dv-view-input' },
+    h('span', { className: 'dv-view-input-label', id: labelId }, node.label),
     side
-      ? h(Segmented, { label: node.label, value: options.findIndex(option => choiceValue(option) === current), className: 'dui-view-seg' },
+      ? h(Segmented, { label: node.label, value: options.findIndex(option => choiceValue(option) === current), className: 'dv-view-seg' },
         options.map(option => h('button', { key: option.label, type: 'button', 'aria-pressed': choiceValue(option) === current, disabled: ctx.locked, onClick: pick(option) }, option.label)))
-      : h('div', { className: 'dui-view-radios', role: 'radiogroup', 'aria-labelledby': labelId },
+      : h('div', { className: 'dv-view-radios', role: 'radiogroup', 'aria-labelledby': labelId },
         options.map(option => h('button', {
-          key: option.label, type: 'button', role: 'radio', className: 'dui-view-radio',
+          key: option.label, type: 'button', role: 'radio', className: 'dv-view-radio',
           'aria-checked': choiceValue(option) === current, disabled: ctx.locked, onClick: pick(option),
-        }, h('span', { className: 'dui-view-radio-dot', 'aria-hidden': true }), option.label))))
+        }, h('span', { className: 'dv-view-radio-dot', 'aria-hidden': true }), option.label))))
 }
 
 function ToggleInput({ node, ctx }) {
   const on = ctx.values[node.id] === true
-  return h('div', { className: 'dui-view-toggle' },
-    h('span', { className: 'dui-view-input-label' }, node.label),
-    h('button', { type: 'button', role: 'switch', className: 'dui-switch', 'aria-checked': on, 'aria-label': node.label, disabled: ctx.locked, onClick: () => ctx.setInput(node.id, !on) },
-      h('span', { className: 'dui-switch-knob', 'aria-hidden': true })))
+  return h('div', { className: 'dv-view-toggle' },
+    h('span', { className: 'dv-view-input-label' }, node.label),
+    h('button', { type: 'button', role: 'switch', className: 'dv-switch', 'aria-checked': on, 'aria-label': node.label, disabled: ctx.locked, onClick: () => ctx.setInput(node.id, !on) },
+      h('span', { className: 'dv-switch-knob', 'aria-hidden': true })))
 }
 
 // One blueprint node. Unknown types render nothing: the host validates the
@@ -292,12 +292,12 @@ function WidgetNode({ node, ctx }) {
     case 'stack':
     case 'row': {
       const children = Array.isArray(node.children) ? node.children : []
-      return h('div', { className: node.type === 'row' ? 'dui-view-row' : 'dui-widget-stack' },
+      return h('div', { className: node.type === 'row' ? 'dv-view-row' : 'dv-widget-stack' },
         children.map((child, index) => h(WidgetNode, { key: child?.id ?? index, node: child, ctx })))
     }
     case 'text': {
       const text = h(ui.Markdown, { text: asText(resolve(node.text, lookup, '')), labels: mdLabels(ui), variant: 'compact' })
-      return node.tone === 'muted' ? h('div', { className: 'dui-view-muted' }, text) : text
+      return node.tone === 'muted' ? h('div', { className: 'dv-view-muted' }, text) : text
     }
     case 'metric': return h(WidgetMetric, { node, lookup })
     case 'table': return h(WidgetTable, { node, lookup })
@@ -361,11 +361,11 @@ function useChartHandles() {
 // chart otherwise.
 export function ViewMenuList({ charts, pick }) {
   const ui = useViewUi()
-  return h('div', { className: 'dui-menu dui-view-menu', role: 'menu' },
+  return h('div', { className: 'dv-menu dv-view-menu', role: 'menu' },
     charts.map((chart, index) => h(Fragment, { key: index },
       charts.length > 1 ? h(Fragment, null,
-        index > 0 ? h('div', { className: 'dui-menu-sep', role: 'separator' }) : null,
-        h('div', { className: 'dui-view-menu-label' }, chart.label ?? ui.t('Chart {n}', { n: index + 1 }))) : null,
+        index > 0 ? h('div', { className: 'dv-menu-sep', role: 'separator' }) : null,
+        h('div', { className: 'dv-view-menu-label' }, chart.label ?? ui.t('Chart {n}', { n: index + 1 }))) : null,
       h('button', { type: 'button', role: 'menuitem', onClick: pick(chart.toggleTable) }, h(TableIcon), chart.asTable ? ui.t('View as chart') : ui.t('View as table')),
       h('button', { type: 'button', role: 'menuitem', onClick: pick(chart.copy) }, h(CopyIcon), ui.t('Copy data')),
       h('button', { type: 'button', role: 'menuitem', onClick: pick(chart.save) }, h(DownloadIcon), ui.t('Download image')))))
@@ -384,8 +384,8 @@ function ViewMenu({ charts }) {
     return () => { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', key) }
   }, [open])
   const pick = run => () => { setOpen(false); run() }
-  return h('div', { ref: root, className: 'dui-view-tools', 'data-open': open ? '' : undefined },
-    h('button', { type: 'button', className: 'dui-view-more', 'aria-label': ui.t('Chart options'), 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => setOpen(value => !value) }, h(DotsIcon)),
+  return h('div', { ref: root, className: 'dv-view-tools', 'data-open': open ? '' : undefined },
+    h('button', { type: 'button', className: 'dv-view-more', 'aria-label': ui.t('Chart options'), 'aria-haspopup': 'menu', 'aria-expanded': open, onClick: () => setOpen(value => !value) }, h(DotsIcon)),
     open ? h(ViewMenuList, { charts, pick }) : null)
 }
 
@@ -397,18 +397,18 @@ export function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, rai
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
   const framed = raised || hasControls(view)
-  const className = ['dui-view', framed ? 'dui-q' : 'dui-view-bare', settled ? 'dui-q-settled' : '', raised ? 'dui-q-raised' : ''].filter(Boolean).join(' ')
+  const className = ['dv-view', framed ? 'dv-q' : 'dv-view-bare', settled ? 'dv-q-settled' : '', raised ? 'dv-q-raised' : ''].filter(Boolean).join(' ')
   const head = title || onDismiss || countType(view, 'chart') > 0
-    ? h('div', { className: 'dui-view-head' },
-      title ? h('p', { className: 'dui-view-title', id: titleId }, title) : h('span', { className: 'dui-view-title' }),
+    ? h('div', { className: 'dv-view-head' },
+      title ? h('p', { className: 'dv-view-title', id: titleId }, title) : h('span', { className: 'dv-view-title' }),
       countType(view, 'chart') > 0 ? h(ViewMenu, { charts }) : null,
-      onDismiss ? h('button', { type: 'button', className: 'dui-q-x', 'aria-label': ui.t('Dismiss view'), title: ui.t('Dismiss'), onClick: onDismiss, disabled: busy }, h(CloseIcon)) : null)
+      onDismiss ? h('button', { type: 'button', className: 'dv-q-x', 'aria-label': ui.t('Dismiss view'), title: ui.t('Dismiss'), onClick: onDismiss, disabled: busy }, h(CloseIcon)) : null)
     : null
   return h('div', {
     className, role: 'group', 'aria-labelledby': title ? titleId : undefined, 'aria-label': title ? undefined : ui.t('View'), 'aria-busy': busy || undefined,
   },
   head,
-  h('div', { className: 'dui-view-body' }, h(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts })))
+  h('div', { className: 'dv-view-body' }, h(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts })))
 }
 
 // An answered view rides on the reply message itself: the settled card, read-only.
@@ -424,103 +424,103 @@ export function AnsweredView({ node }) {
   if (view === null || typeof view !== 'object' || view.view === undefined) return null
   const answers = Array.isArray(payload.answers) ? payload.answers : []
   const answer = answers.find(entry => entry?.id === view.id) ?? answers[0] ?? null
-  return h('div', { className: 'dui-q-inline' }, h(WidgetCard, { title: view.title ?? '', view: view.view, settled: true, answer }))
+  return h('div', { className: 'dv-q-inline' }, h(WidgetCard, { title: view.title ?? '', view: view.view, settled: true, answer }))
 }
 
 export const WIDGET_CSS = `
-.dui-view{min-width:0}
-.dui-view-bare{display:flex;flex-direction:column;gap:8px;width:100%;color:var(--dui-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;animation:dui-veil-in .2s ease-out backwards}
-.dui-view-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.dui-view-title{flex:1 1 0;min-width:0;margin:0;font-size:13px;line-height:18px;font-weight:500;color:var(--dui-ink);overflow-wrap:anywhere}
-.dui-q-settled .dui-view-title{color:var(--dui-ink-2)}
-.dui-view-tools{position:relative;flex:none;align-self:flex-start;opacity:0;transition:opacity .12s ease}
-.dui-view:hover .dui-view-tools,.dui-view-tools:focus-within,.dui-view-tools[data-open]{opacity:1}
-@media (hover:none){.dui-view-tools{opacity:1}}
-.dui-view-more{width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;color:var(--dui-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
-.dui-view-more:hover,.dui-view-tools[data-open] .dui-view-more{background:var(--dui-hover);color:var(--dui-ink)}
-.dui-view-more:focus-visible{outline:2px solid var(--dui-accent);outline-offset:1px}
-.dui-view-more svg{width:16px;height:16px}
-.dui-menu.dui-view-menu{position:absolute;top:32px;right:0;--dui-origin:top right;min-width:180px}
-.dui-menu.dui-view-menu button{gap:8px}
-.dui-view-menu-label{padding:2px 8px;font-size:11px;line-height:14px;color:var(--dui-ink-3);white-space:nowrap}
-.dui-view-body{min-width:0}
-.dui-widget-stack{display:flex;flex-direction:column;gap:12px;min-width:0}
-.dui-view-row{display:flex;flex-wrap:wrap;gap:12px 24px;min-width:0}
-.dui-view-row>*{flex:1 1 160px;min-width:0}
-.dui-widget-metric{display:flex;flex-direction:column;gap:1px;min-width:0}
-.dui-widget-metric-label{font-size:12px;line-height:16px;color:var(--dui-ink-2)}
-.dui-widget-metric-value{font-size:22px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--dui-ink);overflow-wrap:anywhere}
-.dui-widget-metric[data-tone=good] .dui-widget-metric-value{color:var(--dui-green)}
-.dui-widget-metric[data-tone=warn] .dui-widget-metric-value{color:var(--dui-star)}
-.dui-widget-metric[data-tone=bad] .dui-widget-metric-value{color:var(--dui-danger)}
-.dui-view-caption{font-size:12px;line-height:16px;color:var(--dui-ink-2);overflow-wrap:anywhere}
-.dui-view-muted{font-size:12px;line-height:16px;color:var(--dui-ink-2)}
-.dui-view-muted *{font-size:inherit!important;line-height:inherit!important;color:inherit!important}
-.dui-widget-table{max-width:100%;overflow-x:auto;border:.5px solid var(--dui-line-2);border-radius:10px}
-.dui-widget-table table{border-collapse:collapse;min-width:100%;font-size:13px;line-height:18px}
-.dui-widget-table th{padding:6px 10px;font-weight:500;text-align:start;white-space:nowrap;color:var(--dui-ink-2);border-bottom:.5px solid var(--dui-line-2)}
-.dui-widget-table td{padding:6px 10px;max-width:280px;color:var(--dui-ink);overflow-wrap:anywhere}
-.dui-widget-table tbody tr+tr>*{border-top:.5px solid var(--dui-line)}
-.dui-widget-table .dui-num{text-align:end;font-variant-numeric:tabular-nums}
-.dui-widget-form{display:flex;flex-direction:column;gap:8px;margin:0}
-.dui-widget-field{display:flex;flex-direction:column;gap:4px;min-width:0}
-.dui-widget-field-label{font-size:12px;line-height:16px;color:var(--dui-ink-2)}
-.dui-widget-field .dui-q-field:has(.dui-q-input:disabled){cursor:default;opacity:.75}
-.dui-widget-progress{display:flex;flex-direction:column;gap:5px;min-width:0}
-.dui-widget-progress-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:16px;color:var(--dui-ink-2);font-variant-numeric:tabular-nums}
-.dui-widget-progress-name{color:var(--dui-ink);font-weight:500}
-.dui-widget-progress-track{height:6px;border-radius:999px;background:var(--dui-hover);overflow:hidden}
-.dui-widget-progress-fill{height:100%;border-radius:inherit;background:var(--dui-accent);transition:width .12s ease,background-color .12s ease}
-.dui-widget-progress[data-tone=good] .dui-widget-progress-fill{background:var(--dui-green)}
-.dui-widget-progress[data-tone=warn] .dui-widget-progress-fill{background:var(--dui-star)}
-.dui-widget-progress[data-tone=bad] .dui-widget-progress-fill{background:var(--dui-danger)}
-.dui-widget-progress[data-tone=bad] .dui-widget-progress-label>span:last-child{color:var(--dui-danger)}
-.dui-view-callout{display:flex;gap:8px;padding:8px 12px;border-radius:10px;--dui-tone:var(--dui-accent);background:color-mix(in srgb,var(--dui-tone) 8%,transparent);color:var(--dui-ink)}
-.dui-view-callout[data-tone=good]{--dui-tone:var(--dui-green)}
-.dui-view-callout[data-tone=warn]{--dui-tone:var(--dui-star)}
-.dui-view-callout[data-tone=bad]{--dui-tone:var(--dui-danger)}
-.dui-view-callout-icon{flex:none;display:flex;padding-top:3px;color:var(--dui-tone)}
-.dui-view-callout-icon svg{width:16px;height:16px}
-.dui-view-callout-text{flex:1 1 auto;min-width:0}
-.dui-view-sources{display:flex;flex-wrap:wrap;gap:6px}
-.dui-view-source{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:20px;padding:0 6px;border-radius:4px;background:var(--dui-tag-bg,var(--dui-hover));color:var(--dui-ink-2);font-size:11px;line-height:16px;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background-color .12s ease,color .12s ease}
-.dui-view-source:hover{background:var(--dui-hover);color:var(--dui-ink)}
-.dui-view-source:focus-visible{outline:2px solid var(--dui-accent);outline-offset:1px}
-.dui-view-input{display:flex;flex-direction:column;gap:6px;min-width:0}
-.dui-view-input-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.dui-view-input-label{font-size:12px;line-height:16px;color:var(--dui-ink-2)}
-.dui-view-input-value{font-size:15px;line-height:20px;font-weight:600;color:var(--dui-ink);font-variant-numeric:tabular-nums}
-.dui-view-range{-webkit-appearance:none;appearance:none;width:100%;height:20px;margin:0;background:transparent;cursor:pointer}
-.dui-view-range:disabled{cursor:default;opacity:.6}
-.dui-view-range::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--dui-accent) var(--dui-fill,0%),var(--dui-hover) var(--dui-fill,0%))}
-.dui-view-range::-moz-range-track{height:6px;border-radius:999px;background:var(--dui-hover)}
-.dui-view-range::-moz-range-progress{height:6px;border-radius:999px;background:var(--dui-accent)}
-.dui-view-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;corner-shape:round;background:var(--dui-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
-.dui-view-range::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--dui-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
-.dui-view-range:focus-visible{outline:2px solid var(--dui-accent);outline-offset:2px;border-radius:6px}
-.dui-view-number{max-width:200px;align-items:center;gap:6px}
-.dui-view-number .dui-q-input{font-variant-numeric:tabular-nums}
-.dui-view-unit{flex:none;font-size:13px;color:var(--dui-ink-2)}
-.dui-seg.dui-view-seg{align-self:flex-start;max-width:100%}
-.dui-seg.dui-view-seg button{flex:none;padding:0 12px;white-space:nowrap}
-.dui-view-radios{display:flex;flex-direction:column;gap:2px}
-.dui-view-radio{display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 8px;margin:0 -8px;border:0;border-radius:8px;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--dui-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
-.dui-view-radio:hover:not(:disabled){background:var(--dui-hover)}
-.dui-view-radio:disabled{cursor:default}
-.dui-view-radio:focus-visible{outline:2px solid var(--dui-accent);outline-offset:-2px}
-.dui-view-radio-dot{flex:none;width:16px;height:16px;border-radius:50%;corner-shape:round;box-shadow:inset 0 0 0 1.5px var(--dui-line-2);transition:box-shadow .12s ease}
-.dui-view-radio[aria-checked=true] .dui-view-radio-dot{box-shadow:inset 0 0 0 5px var(--dui-accent)}
-.dui-view-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px}
-.dui-view-toggle .dui-view-input-label{font-size:14px;line-height:20px;color:var(--dui-ink)}
-.dui-q.dui-view{gap:10px}
-.dui-q.dui-view:not(.dui-q-raised):not(.dui-q-settled)>.dui-view-head:has(.dui-view-title:empty){margin-bottom:-6px}
-.dui-q-raised .dui-view-head{padding:14px 16px 4px 20px}
-.dui-q-raised .dui-view-body{padding:0 16px 14px 20px}
-.dui-q-raised .dui-view-body .dui-q-list{padding:0;margin:0 -8px}
-.dui-q-inline .dui-view{margin:0;width:100%;max-width:min(100%,max(calc(var(--dui-msg-w,.8) * 100%),560px));order:0}
-body[data-dui-layout=flat] .dui-q-inline .dui-view{max-width:calc(var(--dui-flat-w,1) * 100%)}
-.dui-q-inline:has(>.dui-view-bare){margin:8px 0 12px}
-@media (prefers-reduced-motion:reduce){.dui-widget-progress-fill,.dui-view-radio-dot,.dui-view-tools,.dui-view-more{transition:none}.dui-view-bare{animation:none}}
+.dv-view{min-width:0}
+.dv-view-bare{display:flex;flex-direction:column;gap:8px;width:100%;color:var(--dv-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;animation:dv-veil-in .2s ease-out backwards}
+.dv-view-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.dv-view-title{flex:1 1 0;min-width:0;margin:0;font-size:13px;line-height:18px;font-weight:500;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-q-settled .dv-view-title{color:var(--dv-ink-2)}
+.dv-view-tools{position:relative;flex:none;align-self:flex-start;opacity:0;transition:opacity .12s ease}
+.dv-view:hover .dv-view-tools,.dv-view-tools:focus-within,.dv-view-tools[data-open]{opacity:1}
+@media (hover:none){.dv-view-tools{opacity:1}}
+.dv-view-more{width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;color:var(--dv-ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.dv-view-more:hover,.dv-view-tools[data-open] .dv-view-more{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-view-more:focus-visible{outline:2px solid var(--dv-accent);outline-offset:1px}
+.dv-view-more svg{width:16px;height:16px}
+.dv-menu.dv-view-menu{position:absolute;top:32px;right:0;--dv-origin:top right;min-width:180px}
+.dv-menu.dv-view-menu button{gap:8px}
+.dv-view-menu-label{padding:2px 8px;font-size:11px;line-height:14px;color:var(--dv-ink-3);white-space:nowrap}
+.dv-view-body{min-width:0}
+.dv-widget-stack{display:flex;flex-direction:column;gap:12px;min-width:0}
+.dv-view-row{display:flex;flex-wrap:wrap;gap:12px 24px;min-width:0}
+.dv-view-row>*{flex:1 1 160px;min-width:0}
+.dv-widget-metric{display:flex;flex-direction:column;gap:1px;min-width:0}
+.dv-widget-metric-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-widget-metric-value{font-size:22px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-widget-metric[data-tone=good] .dv-widget-metric-value{color:var(--dv-green)}
+.dv-widget-metric[data-tone=warn] .dv-widget-metric-value{color:var(--dv-star)}
+.dv-widget-metric[data-tone=bad] .dv-widget-metric-value{color:var(--dv-danger)}
+.dv-view-caption{font-size:12px;line-height:16px;color:var(--dv-ink-2);overflow-wrap:anywhere}
+.dv-view-muted{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-view-muted *{font-size:inherit!important;line-height:inherit!important;color:inherit!important}
+.dv-widget-table{max-width:100%;overflow-x:auto;border:.5px solid var(--dv-line-2);border-radius:10px}
+.dv-widget-table table{border-collapse:collapse;min-width:100%;font-size:13px;line-height:18px}
+.dv-widget-table th{padding:6px 10px;font-weight:500;text-align:start;white-space:nowrap;color:var(--dv-ink-2);border-bottom:.5px solid var(--dv-line-2)}
+.dv-widget-table td{padding:6px 10px;max-width:280px;color:var(--dv-ink);overflow-wrap:anywhere}
+.dv-widget-table tbody tr+tr>*{border-top:.5px solid var(--dv-line)}
+.dv-widget-table .dv-num{text-align:end;font-variant-numeric:tabular-nums}
+.dv-widget-form{display:flex;flex-direction:column;gap:8px;margin:0}
+.dv-widget-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dv-widget-field-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-widget-field .dv-q-field:has(.dv-q-input:disabled){cursor:default;opacity:.75}
+.dv-widget-progress{display:flex;flex-direction:column;gap:5px;min-width:0}
+.dv-widget-progress-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:16px;color:var(--dv-ink-2);font-variant-numeric:tabular-nums}
+.dv-widget-progress-name{color:var(--dv-ink);font-weight:500}
+.dv-widget-progress-track{height:6px;border-radius:999px;background:var(--dv-hover);overflow:hidden}
+.dv-widget-progress-fill{height:100%;border-radius:inherit;background:var(--dv-accent);transition:width .12s ease,background-color .12s ease}
+.dv-widget-progress[data-tone=good] .dv-widget-progress-fill{background:var(--dv-green)}
+.dv-widget-progress[data-tone=warn] .dv-widget-progress-fill{background:var(--dv-star)}
+.dv-widget-progress[data-tone=bad] .dv-widget-progress-fill{background:var(--dv-danger)}
+.dv-widget-progress[data-tone=bad] .dv-widget-progress-label>span:last-child{color:var(--dv-danger)}
+.dv-view-callout{display:flex;gap:8px;padding:8px 12px;border-radius:10px;--dv-tone:var(--dv-accent);background:color-mix(in srgb,var(--dv-tone) 8%,transparent);color:var(--dv-ink)}
+.dv-view-callout[data-tone=good]{--dv-tone:var(--dv-green)}
+.dv-view-callout[data-tone=warn]{--dv-tone:var(--dv-star)}
+.dv-view-callout[data-tone=bad]{--dv-tone:var(--dv-danger)}
+.dv-view-callout-icon{flex:none;display:flex;padding-top:3px;color:var(--dv-tone)}
+.dv-view-callout-icon svg{width:16px;height:16px}
+.dv-view-callout-text{flex:1 1 auto;min-width:0}
+.dv-view-sources{display:flex;flex-wrap:wrap;gap:6px}
+.dv-view-source{display:inline-flex;align-items:center;gap:4px;max-width:100%;height:20px;padding:0 6px;border-radius:4px;background:var(--dv-tag-bg,var(--dv-hover));color:var(--dv-ink-2);font-size:11px;line-height:16px;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background-color .12s ease,color .12s ease}
+.dv-view-source:hover{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-view-source:focus-visible{outline:2px solid var(--dv-accent);outline-offset:1px}
+.dv-view-input{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dv-view-input-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dv-view-input-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
+.dv-view-input-value{font-size:15px;line-height:20px;font-weight:600;color:var(--dv-ink);font-variant-numeric:tabular-nums}
+.dv-view-range{-webkit-appearance:none;appearance:none;width:100%;height:20px;margin:0;background:transparent;cursor:pointer}
+.dv-view-range:disabled{cursor:default;opacity:.6}
+.dv-view-range::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--dv-accent) var(--dv-fill,0%),var(--dv-hover) var(--dv-fill,0%))}
+.dv-view-range::-moz-range-track{height:6px;border-radius:999px;background:var(--dv-hover)}
+.dv-view-range::-moz-range-progress{height:6px;border-radius:999px;background:var(--dv-accent)}
+.dv-view-range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;corner-shape:round;background:var(--dv-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
+.dv-view-range::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--dv-knob);box-shadow:0 1px 3px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.12)}
+.dv-view-range:focus-visible{outline:2px solid var(--dv-accent);outline-offset:2px;border-radius:6px}
+.dv-view-number{max-width:200px;align-items:center;gap:6px}
+.dv-view-number .dv-q-input{font-variant-numeric:tabular-nums}
+.dv-view-unit{flex:none;font-size:13px;color:var(--dv-ink-2)}
+.dv-seg.dv-view-seg{align-self:flex-start;max-width:100%}
+.dv-seg.dv-view-seg button{flex:none;padding:0 12px;white-space:nowrap}
+.dv-view-radios{display:flex;flex-direction:column;gap:2px}
+.dv-view-radio{display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 8px;margin:0 -8px;border:0;border-radius:8px;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--dv-ink);text-align:start;cursor:pointer;transition:background-color .12s ease}
+.dv-view-radio:hover:not(:disabled){background:var(--dv-hover)}
+.dv-view-radio:disabled{cursor:default}
+.dv-view-radio:focus-visible{outline:2px solid var(--dv-accent);outline-offset:-2px}
+.dv-view-radio-dot{flex:none;width:16px;height:16px;border-radius:50%;corner-shape:round;box-shadow:inset 0 0 0 1.5px var(--dv-line-2);transition:box-shadow .12s ease}
+.dv-view-radio[aria-checked=true] .dv-view-radio-dot{box-shadow:inset 0 0 0 5px var(--dv-accent)}
+.dv-view-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px}
+.dv-view-toggle .dv-view-input-label{font-size:14px;line-height:20px;color:var(--dv-ink)}
+.dv-q.dv-view{gap:10px}
+.dv-q.dv-view:not(.dv-q-raised):not(.dv-q-settled)>.dv-view-head:has(.dv-view-title:empty){margin-bottom:-6px}
+.dv-q-raised .dv-view-head{padding:14px 16px 4px 20px}
+.dv-q-raised .dv-view-body{padding:0 16px 14px 20px}
+.dv-q-raised .dv-view-body .dv-q-list{padding:0;margin:0 -8px}
+.dv-q-inline .dv-view{margin:0;width:100%;max-width:min(100%,max(calc(var(--dv-msg-w,.8) * 100%),560px));order:0}
+body[data-dv-layout=flat] .dv-q-inline .dv-view{max-width:calc(var(--dv-flat-w,1) * 100%)}
+.dv-q-inline:has(>.dv-view-bare){margin:8px 0 12px}
+@media (prefers-reduced-motion:reduce){.dv-widget-progress-fill,.dv-view-radio-dot,.dv-view-tools,.dv-view-more{transition:none}.dv-view-bare{animation:none}}
 ${CHART_CSS}
 ${HTML_CSS}
 `

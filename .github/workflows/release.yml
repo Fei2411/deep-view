@@ -1,0 +1,91 @@
+name: Release
+
+# Publishes deep-view to npm when a GitHub release is published.
+#
+# npm Trusted Publishing: npm trusts this workflow through GitHub's OIDC token, so the
+# repository keeps no npm token, and every version gets a provenance statement. It is set
+# up once on npmjs.com: package deep-view → Settings → Trusted Publisher → GitHub Actions,
+# user Fei2411, repository deep-view, workflow release.yml, no environment. (The first
+# version was published by hand, before the trusted publisher existed.)
+#
+# The release tag must be v<version in package.json> and must point at a commit on
+# main. A version with a pre-release part (0.1.0-rc.1) goes to the npm tag "next", so
+# that "latest" stays on the last stable version.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run every check and pack the package, but do not publish
+        type: boolean
+        default: true
+
+permissions:
+  # write: attach the package file to the release.
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Check and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted Publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@11.6.2 --no-fund --no-audit
+
+      - name: Check the tag and the branch
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::The release tag is $TAG, but package.json has version $version. Tag v$version or change the version."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$TAG points at a commit that is not on main. Release from main."
+            exit 1
+          fi
+
+      - run: npm ci --no-fund --no-audit
+      - run: npm run harness
+      - run: npm test
+      - run: node scripts/build-client.mjs --check
+      - run: npm run lint
+      - run: node scripts/scan.mjs
+
+      - name: Pack (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm pack --dry-run
+
+      - name: Publish
+        if: github.event_name == 'release' || (!inputs.dry_run && github.ref == 'refs/heads/main')
+        run: |
+          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest')"
+          echo "Publishing $(node -p "require('./package.json').version") with the npm tag $tag"
+          npm publish --provenance --access public --tag "$tag"
+
+      # The release keeps the package file for installs without npm.
+      - name: Attach the package to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          npm pack
+          gh release upload "$TAG" "deep-view-$(node -p "require('./package.json').version").tgz" --clobber

@@ -40,7 +40,7 @@ const makeTurn = (views) => {
   const data = { views }
   return {
     data: {
-      get: key => (key === 'deep-ui-views' ? data : undefined),
+      get: key => (key === 'deep-view-views' ? data : undefined),
       source: () => ({ getSnapshot: () => data, subscribe: () => () => {} }),
     },
   }
@@ -70,8 +70,8 @@ test('display-only call renders the card from its arguments, without asking for 
   const calls = recordCalls(null)
   const turn = makeTurn([{ callId: 'c1', args: { title: 'Stats', view: METER } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(1)) }))
-  assert.ok(box.querySelector('.dui-view-bare'), 'bare card')
-  assert.equal(box.querySelector('.dui-widget-metric-label')?.textContent, 'Progress')
+  assert.ok(box.querySelector('.dv-view-bare'), 'bare card')
+  assert.equal(box.querySelector('.dv-widget-metric-label')?.textContent, 'Progress')
   assert.equal(calls.filter(body => body.op === 'pending').length, 0, 'display views never query pending')
   await unmount()
 })
@@ -81,8 +81,8 @@ test('interactive call renders the live card while the record names it', async (
   const turn = makeTurn([{ callId: 'c2', args: { title: 'Pick', view: CHOICES } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(2)) }))
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
-  assert.ok(box.querySelector('.dui-q'), 'interactive card')
-  assert.ok(box.querySelector('.dui-q-opt'), 'option rows')
+  assert.ok(box.querySelector('.dv-q'), 'interactive card')
+  assert.ok(box.querySelector('.dv-q-opt'), 'option rows')
   await unmount()
 })
 
@@ -91,7 +91,7 @@ test('interactive call without a matching record renders nothing', async () => {
   const turn = makeTurn([{ callId: 'c3', args: { view: CHOICES } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(2)) }))
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
-  assert.equal(box.querySelector('.dui-q'), null)
+  assert.equal(box.querySelector('.dv-q'), null)
   await unmount()
 })
 
@@ -99,7 +99,7 @@ test('refused call (invalid blueprint) renders nothing', async () => {
   recordCalls(null)
   const turn = makeTurn([{ callId: 'c4', args: { view: { type: 'nope' } } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(1)) }))
-  assert.equal(box.querySelector('.dui-view'), null)
+  assert.equal(box.querySelector('.dv-view'), null)
   await unmount()
 })
 
@@ -108,7 +108,7 @@ test('submitting an options card posts a reply and removes the card', async () =
   const turn = makeTurn([{ callId: 'c5', args: { view: CHOICES } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(2)) }))
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
-  const option = box.querySelector('.dui-q-opt')
+  const option = box.querySelector('.dv-q-opt')
   assert.ok(option, 'option row present')
   // A single-select options card answers on the pick itself, no submit step.
   await act(async () => { option.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
@@ -126,8 +126,8 @@ test('an answered view renders the settled card from the reply in the chat, no p
   const replyText = REPLY('c6', ['B'])
   const turn = makeTurn([{ callId: 'c6', args: { title: 'Pick', view: CHOICES } }])
   const { box, unmount } = await render(h(ViewsTail, { turn, sessionId: 's1', useConversation: useConversationOf(convOf(3, replyText)) }))
-  assert.ok(box.querySelector('.dui-q-settled'), 'settled card')
-  assert.equal(box.querySelector('.dui-q-submit'), null, 'no live controls')
+  assert.ok(box.querySelector('.dv-q-settled'), 'settled card')
+  assert.equal(box.querySelector('.dv-q-submit'), null, 'no live controls')
   assert.equal(calls.filter(body => body.op === 'pending').length, 0, 'answered views never query pending')
   await unmount()
 })
@@ -138,7 +138,7 @@ test('the reply bubble shows a compact answer summary, not the JSON', async () =
   assert.ok(matched, 'rule claims the reply text')
   const { box, unmount } = await render(h(ViewReplyNode, { node: { data: { text: replyText } } }))
   assert.equal(box.textContent.trim(), 'B', 'compact inline answer')
-  assert.equal(box.querySelector('.dui-ububble, .dui-urow'), null, 'no own bubble styling')
+  assert.equal(box.querySelector('.dv-ububble, .dv-urow'), null, 'no own bubble styling')
   await unmount()
 })
 
@@ -147,9 +147,9 @@ test('the Definition folds only successful show_view calls into turn data', () =
     { type: 'turn/start', seq: 1, data: { turn: 1 } },
     { type: 'tool/call', seq: 2, data: { turn: 1, step: 1, callId: 'c1', name: 'show_view', arguments: JSON.stringify({ title: 'Stats', view: METER }) } },
     { type: 'tool/call', seq: 3, data: { turn: 1, step: 1, callId: 'c2', name: 'pwsh', arguments: '{"cmd":"x"}' } },
-    { type: 'tool/result', seq: 4, data: { turn: 1, step: 1, meta: { owner: 'dsh-deep-ui' }, message: { source: { callId: 'c1' } } } },
+    { type: 'tool/result', seq: 4, data: { turn: 1, step: 1, meta: { owner: 'deep-view' }, message: { source: { callId: 'c1' } } } },
     { type: 'tool/call', seq: 5, data: { turn: 1, step: 1, callId: 'c3', name: 'show_view', arguments: JSON.stringify({ view: CHOICES }) } },
-    { type: 'tool/result', seq: 6, data: { turn: 1, step: 1, meta: { owner: 'dsh-deep-ui' }, message: { source: { callId: 'c3' }, isError: true } } },
+    { type: 'tool/result', seq: 6, data: { turn: 1, step: 1, meta: { owner: 'deep-view' }, message: { source: { callId: 'c3' }, isError: true } } },
     // A show_view another plugin answered carries no marker: its call stays undrawn.
     { type: 'tool/call', seq: 7, data: { turn: 1, step: 2, callId: 'c4', name: 'show_view', arguments: JSON.stringify({ view: METER }) } },
     { type: 'tool/result', seq: 8, data: { turn: 1, step: 2, message: { source: { callId: 'c4' } } } },
@@ -163,15 +163,15 @@ test('the Definition folds only successful show_view calls into turn data', () =
     else state = viewsDefinition.update({ ...context, state }, { event, role: 'update' })
   }
   const data = viewsDefinition.buildLocationData({ ...context, state }, 'turn', null)
-  assert.equal(data.key, 'deep-ui-views')
+  assert.equal(data.key, 'deep-view-views')
   assert.equal(data.value.views.length, 1, 'one successful call')
   assert.equal(data.value.views[0].callId, 'c1')
   assert.deepEqual(data.value.views[0].args, { title: 'Stats', view: METER })
 })
 
-test('a WidgetCard uses the dui- class names', async () => {
+test('a WidgetCard uses the dv- class names', async () => {
   const { box, unmount } = await render(h(WidgetCard, { title: 'T', view: METER, settled: true }))
-  assert.ok(box.querySelector('.dui-view'))
-  assert.ok(box.querySelector('.dui-widget-metric'))
+  assert.ok(box.querySelector('.dv-view'))
+  assert.ok(box.querySelector('.dv-widget-metric'))
   await unmount()
 })

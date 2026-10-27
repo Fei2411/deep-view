@@ -4,7 +4,7 @@ Instructions for AI coding agents that work on this repository.
 
 ## What this project is
 
-Deep UI is a DeepSeek Harness (DSH) plugin that lets any agent draw interactive views in the chat — the `show_view` tool. `index.js` + `src/host/` are the server side (tool registration, the pending-view store, the `/api/deep-ui` route, the user-message revoke); `src/client/` is the browser side (tool view, answered-reply node, styles); `src/core/` is the pure shared blueprint/validator/reply code; `src/react/` is the presentational components (dependency-injected via the `ViewUi` context). `client.js` is generated from `src/client/` by `npm run build`.
+Deep View is a DeepSeek Harness (DSH) plugin that lets any agent draw interactive views in the chat — the `show_view` tool. `index.js` + `src/host/` are the server side (tool registration, the pending-view store, the `/api/deep-view` route, the user-message revoke); `src/client/` is the browser side (tool view, answered-reply node, styles); `src/core/` is the pure shared blueprint/validator/reply code; `src/react/` is the presentational components (dependency-injected via the `ViewUi` context). `client.js` is generated from `src/client/` by `npm run build`.
 
 ## Hard rules
 

@@ -1,6 +1,6 @@
-# Deep UI
+# Deep View
 
-Deep UI 是一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，让任何 Agent 都能在聊天里画出交互视图：图表、关键数字、表格、用户可以自己调参数的小计算器，以及单选、确认和简短表单。用 Markdown 表达不顺的结构化回答——对比图表、可调滑块、选一题——会变成会话里的一张卡片。
+Deep View 是一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，让任何 Agent 都能在聊天里画出交互视图：图表、关键数字、表格、用户可以自己调参数的小计算器，以及单选、确认和简短表单。用 Markdown 表达不顺的结构化回答——对比图表、可调滑块、选一题——会变成会话里的一张卡片。
 
 它是 DS Bot 为其 Bot 提供的 `show_view` 能力的独立版本，同时沉淀了共享核心（`src/core`）和展示层组件（`src/react`），供其他宿主复用。
 
@@ -10,13 +10,13 @@ Deep UI 是一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 
 ```yaml
 - insert:
-    - id: deep-ui
-      name: dsh-deep-ui
+    - id: deep-view
+      name: deep-view
 ```
 
 然后重开会话。每个 Agent 的工具列表里都会出现 `show_view`。
 
-与 DS Bot 一起用时，需要一个把自己的 `show_view` 改为按会话注册的 DS Bot 版本；旧版本下 Deep UI 仍会安装，但它的工具不会启用。
+与 DS Bot 一起用时，请用 0.2.3 以上版本的 DS Bot；旧版本下 Deep View 仍会安装，但它的 `show_view` 工具不会启用。
 
 ## Agent 能画什么
 
