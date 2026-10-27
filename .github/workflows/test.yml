@@ -41,4 +41,8 @@ jobs:
       - run: node scripts/build-client.mjs --check
       - run: node --import ./test/harness-resolve.mjs --test --test-timeout=120000 "test/*.test.js"
       - run: npm run lint
-      - run: node scripts/scan.mjs
+      # Scan exactly the tracked files, as they would be published.
+      - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
+      - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
+        env:
+          SCAN_EXTRA_PATTERNS: ${{ secrets.SCAN_EXTRA_PATTERNS }}

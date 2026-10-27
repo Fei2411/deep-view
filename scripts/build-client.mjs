@@ -55,7 +55,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--check')) {
     let current = null
     try { current = readFileSync(OUTPUT, 'utf8') } catch { /* missing counts as stale */ }
-    if (current !== next) {
+    if (current !== next && current?.replace(/\r\n/g, '\n') !== next) {
       console.error('client.js is stale: run `npm run build` in deep-view and commit the result')
       process.exit(1)
     }

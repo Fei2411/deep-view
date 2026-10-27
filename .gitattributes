@@ -1,0 +1,6 @@
+# esbuild writes LF; an autocrlf checkout must not rewrite text files to CRLF
+# or the committed client.js reads stale against a fresh build.
+* text=auto
+*.js text eol=lf
+*.mjs text eol=lf
+*.sh text eol=lf
