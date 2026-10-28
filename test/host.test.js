@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -35,7 +35,17 @@ function start({ beforeApply } = {}) {
   const call = async (op, body) => (await route.fetch(new Request(`http://localhost/api/deep-view`, {
     method: 'POST', body: JSON.stringify({ op, ...body }),
   }))).json()
-  return { ctx, emit, show, call, sent, failFlush(e) { flushError = e }, stop: async () => { rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
+  // A revoke from emit() saves without being awaited, and the save makes the folder
+  // again, so remove it until no write in flight brings it back.
+  const stop = async () => {
+    for (let round = 0; round < 50; round++) {
+      try { rmSync(home, { recursive: true, force: true }) } catch { /* a write landed mid-removal */ }
+      await new Promise(resolve => setTimeout(resolve, 20))
+      if (!existsSync(home)) return
+    }
+    throw new Error(`could not remove ${home}`)
+  }
+  return { ctx, emit, show, call, sent, failFlush(e) { flushError = e }, stop }
 }
 
 test('a global show_view from another plugin warns instead of failing activation', async () => {
@@ -116,7 +126,8 @@ test('interactive view: a failed write returns an error and the turn keeps runni
   const blocker = join(file, 'blocker')
   await import('node:fs/promises').then(fs => fs.writeFile(blocker, 'x'))
   const t = start()
-  t.stop = async () => rmSync(file, { recursive: true, force: true, maxRetries: 5 })
+  const stopHome = t.stop
+  t.stop = async () => { rmSync(file, { recursive: true, force: true, maxRetries: 5 }); await stopHome() }
   // A home inside a regular file cannot be created, so every write fails.
   const home = join(blocker, 'sub')
   const ctx = fakeContext()
