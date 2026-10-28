@@ -6,7 +6,7 @@ import { ViewUi } from '../react/ui.js'
 import { DEEP_VIEW_CSS } from '../react/index.js'
 import { viewsDefinition } from './views-definition.js'
 import { ViewsTail } from './tail.js'
-import { ViewReplyNode, viewReplyRule } from './reply-node.js'
+import { ViewReplyNode, viewReplyDefinition } from './reply-node.js'
 
 const NS = 'deep-view'
 
@@ -94,12 +94,13 @@ export function apply(ctx) {
     locale: NS,
   }, withUi(ViewsTail))))
 
-  // The reply message is a plain user message; the rule claims its JSON body
-  // and the node draws the compact answer summary in the bubble.
-  step('user text rule', () => ctx.uiConversation.userText.register(viewReplyRule))
-  step('user text node', () => ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
-    name: 'conversation.user.text.node',
-    key: 'deep-view-view-reply',
+  // The reply message carries source kind 'deep-view-reply'; the Definition
+  // claims it into its own chat node and the node draws the compact answer
+  // summary, so the raw reply JSON never renders as a plain user bubble.
+  step('reply definition', () => ctx.effect(() => ctx.uiConversation.events.register(viewReplyDefinition), 'deep-view: reply definition'))
+  step('reply node', () => ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'deep-view-reply',
     locale: NS,
   }, withUi(ViewReplyNode))))
 }

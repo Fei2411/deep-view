@@ -7,7 +7,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { checkShownView, validateViewAnswer } from '../core/views.js'
 import { showViewParameters, showViewDescription } from '../core/tool-schema.js'
-import { viewReply } from '../core/reply.js'
+import { REPLY_SOURCE_KIND, viewReply } from '../core/reply.js'
 import { createPendingStore } from './pending.js'
 
 export const ROUTE = '/api/deep-view'
@@ -87,7 +87,7 @@ export function install(ctx, config = {}) {
     const id = session?.id
     if (id === undefined || event?.type !== 'user/message') return
     const kind = event.data?.source?.kind
-    if (kind === 'user' || kind === 'user-question-reply') void pending.drop(id).catch(() => {})
+    if (kind === 'user' || kind === 'user-question-reply' || kind === REPLY_SOURCE_KIND) void pending.drop(id).catch(() => {})
   })
 
   const handle = async (op, body) => {
@@ -108,7 +108,7 @@ export function install(ctx, config = {}) {
           if (record === undefined || record.id !== body.viewId) return fail('This view is no longer open', 'deep-view/stale')
           const checked = validateViewAnswer(record.view, body.action, body.values)
           if (checked.error !== undefined) return fail(checked.error, 'deep-view/invalid')
-          const reply = viewReply(record, body.action, body.values, 'user')
+          const reply = viewReply(record, body.action, body.values, REPLY_SOURCE_KIND)
           if (reply === undefined) return fail('Nothing to send', 'deep-view/invalid')
           // Claim the view before queueing so a second answer is refused.
           await pending.drop(sessionId)

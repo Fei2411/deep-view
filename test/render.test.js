@@ -13,7 +13,7 @@ const { createElement: h, act, Fragment } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { WidgetCard, ViewUi, useOptionKeys } = await import('../src/react/index.js')
 const { ViewsTail } = await import('../src/client/tail.js')
-const { ViewReplyNode, viewReplyRule } = await import('../src/client/reply-node.js')
+const { ViewReplyNode, viewReplyDefinition } = await import('../src/client/reply-node.js')
 const { viewsDefinition } = await import('../src/client/views-definition.js')
 
 const t = (key, data) => (data?.n !== undefined ? `${key} ${data.n}` : key)
@@ -132,11 +132,23 @@ test('an answered view renders the settled card from the reply in the chat, no p
   await unmount()
 })
 
-test('the reply bubble shows a compact answer summary, not the JSON', async () => {
+test('the reply chat row shows a compact answer summary, not the JSON', async () => {
   const replyText = REPLY('c7', ['B'])
-  const matched = viewReplyRule.match(replyText, 0)
-  assert.ok(matched, 'rule claims the reply text')
-  const { box, unmount } = await render(h(ViewReplyNode, { node: { data: { text: replyText } } }))
+  const event = {
+    type: 'user/message', seq: 9, time: 100, surfaceOp: 'append',
+    data: {
+      id: 'm1',
+      source: { kind: 'deep-view-reply', callId: 'c7', outcome: 'answered' },
+      content: [{ type: 'text', text: replyText }],
+    },
+  }
+  const matched = viewReplyDefinition.match(event)
+  assert.ok(matched, 'definition claims the reply event')
+  assert.equal(viewReplyDefinition.match({ ...event, data: { ...event.data, source: { kind: 'user' } } }), null, 'plain user message untouched')
+  const state = viewReplyDefinition.start({}, { event, role: 'start' })
+  const chatNode = viewReplyDefinition.buildViewNode({ state, key: 'k', id: 'm1', start: { event, location: { kind: 'unresolved' } } })
+  assert.equal(chatNode.kind, 'deep-view-reply')
+  const { box, unmount } = await render(h(ViewReplyNode, { node: chatNode }))
   assert.equal(box.textContent.trim(), 'B', 'compact inline answer')
   assert.equal(box.querySelector('.dv-ububble, .dv-urow'), null, 'no own bubble styling')
   await unmount()

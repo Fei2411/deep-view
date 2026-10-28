@@ -1,19 +1,45 @@
-// The view answer's own user bubble: the reply message is a plain user message
-// whose text is the answer_to_pending_view JSON. The rule claims that text so
-// the raw JSON never reaches the bubble, and the node draws one compact line —
-// the picked labels, the confirm or cancel label, or the submitted values.
+// The view answer's own chat row: the reply is a user/message event carrying
+// source kind 'deep-view-reply'. The Definition claims it into a
+// 'deep-view-reply' node so the raw JSON never reaches a bubble, and the node
+// draws one compact line — the picked labels, the confirm or cancel label, or
+// the submitted values.
 import { createElement as h } from 'react'
-import { readViewReply, viewAnswerText } from '../core/reply.js'
+import { REPLY_SOURCE_KIND, readViewReply, viewAnswerText } from '../core/reply.js'
 
-export const viewReplyRule = {
-  id: 'deep-view-view-reply',
-  order: 10,
-  match: (text, from) => {
-    const rest = text.slice(from).trimStart()
-    const start = from + (text.slice(from).length - rest.length)
-    const data = readViewReply(rest)
-    if (data === undefined) return undefined
-    return { id: 'deep-view-view-reply', start, end: text.length, data: { text: rest } }
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const isReplySource = (source) => isRecord(source) && source.kind === REPLY_SOURCE_KIND
+  && typeof source.callId === 'string' && source.outcome === 'answered'
+
+export const viewReplyDefinition = {
+  kind: 'deep-view-reply',
+  target: 'chat',
+  match: (event) => {
+    // surfaceOp 'append' mirrors isAppendSurfaceEvent without importing
+    // dsh-session/surface into the browser bundle.
+    if (event?.type !== 'user/message' || event.surfaceOp !== 'append'
+      || !isReplySource(event.data?.source)) return null
+    return { id: String(event.data?.id), role: 'start' }
+  },
+  start: (_context, match) => {
+    const event = match.event
+    const block = Array.isArray(event.data?.content) ? event.data.content.find(item => item?.type === 'text') : undefined
+    return { seq: event.seq, time: event.time, text: block?.text ?? '' }
+  },
+  update: context => context.state,
+  buildViewNode: (context) => {
+    if (context.state === undefined) return null
+    const { seq, ...data } = context.state
+    return {
+      key: context.key,
+      kind: 'deep-view-reply',
+      id: context.id,
+      target: 'chat',
+      anchorSeq: seq,
+      location: context.start?.location ?? { kind: 'unresolved' },
+      visibility: 'visible',
+      data,
+    }
   },
 }
 

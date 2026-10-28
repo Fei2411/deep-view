@@ -6,6 +6,11 @@ export { viewSummary }
 
 const REPLY_KIND = 'user-question-reply'
 
+// The source kind Deep View puts on its own answer messages: the client's
+// conversation Definition claims them into 'deep-view-reply' nodes, so the raw
+// reply JSON never renders as a plain user bubble.
+export const REPLY_SOURCE_KIND = 'deep-view-reply'
+
 // A show_view card as the user saw it, one line for a handoff or a checkpoint.
 // A call the tool would refuse showed no card, so it gives no text.
 export function viewCardText(args) {

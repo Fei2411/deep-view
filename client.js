@@ -2435,6 +2435,7 @@ function ViewsTail({ turn, sessionId, useConversation }) {
 
 // src/core/reply.js
 var REPLY_KIND = "user-question-reply";
+var REPLY_SOURCE_KIND = "deep-view-reply";
 function viewCardText(args) {
   let card = args;
   if (typeof card === "string") {
@@ -2547,15 +2548,34 @@ Answer: ${actionSummary(answer, view.view)}`;
 
 // src/client/reply-node.js
 var import_react6 = require("react");
-var viewReplyRule = {
-  id: "deep-view-view-reply",
-  order: 10,
-  match: (text, from) => {
-    const rest = text.slice(from).trimStart();
-    const start = from + (text.slice(from).length - rest.length);
-    const data = readViewReply(rest);
-    if (data === void 0) return void 0;
-    return { id: "deep-view-view-reply", start, end: text.length, data: { text: rest } };
+var isRecord3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var isReplySource = (source) => isRecord3(source) && source.kind === REPLY_SOURCE_KIND && typeof source.callId === "string" && source.outcome === "answered";
+var viewReplyDefinition = {
+  kind: "deep-view-reply",
+  target: "chat",
+  match: (event) => {
+    if (event?.type !== "user/message" || event.surfaceOp !== "append" || !isReplySource(event.data?.source)) return null;
+    return { id: String(event.data?.id), role: "start" };
+  },
+  start: (_context, match) => {
+    const event = match.event;
+    const block = Array.isArray(event.data?.content) ? event.data.content.find((item) => item?.type === "text") : void 0;
+    return { seq: event.seq, time: event.time, text: block?.text ?? "" };
+  },
+  update: (context) => context.state,
+  buildViewNode: (context) => {
+    if (context.state === void 0) return null;
+    const { seq, ...data } = context.state;
+    return {
+      key: context.key,
+      kind: "deep-view-reply",
+      id: context.id,
+      target: "chat",
+      anchorSeq: seq,
+      location: context.start?.location ?? { kind: "unresolved" },
+      visibility: "visible",
+      data
+    };
   }
 };
 function ViewReplyNode({ node }) {
@@ -2656,10 +2676,10 @@ function apply(ctx) {
     id: "deep-view-views",
     locale: NS
   }, withUi(ViewsTail))));
-  step("user text rule", () => ctx.uiConversation.userText.register(viewReplyRule));
-  step("user text node", () => ctx.slots.inject("conversation.user.text.node", () => ctx.slots.register({
-    name: "conversation.user.text.node",
-    key: "deep-view-view-reply",
+  step("reply definition", () => ctx.effect(() => ctx.uiConversation.events.register(viewReplyDefinition), "deep-view: reply definition"));
+  step("reply node", () => ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
+    name: "conversation.chat.node",
+    key: "deep-view-reply",
     locale: NS
   }, withUi(ViewReplyNode))));
 }

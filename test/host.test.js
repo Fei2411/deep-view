@@ -163,7 +163,7 @@ test('reply: validation, stale, duplicate, restore-on-failure, success shape', a
   // The failed flush left its follow-up queued, so the success is the second.
   assert.equal(t.sent.length, 2)
   const message = t.sent.at(-1).message
-  assert.equal(message.source.kind, 'user')
+  assert.equal(message.source.kind, 'deep-view-reply')
   assert.equal(message.source.outcome, 'answered')
   const payload = JSON.parse(message.content[0].text)
   assert.equal(payload.kind, 'answer_to_pending_view')
@@ -183,6 +183,9 @@ test('revoke: a user message or card answer drops the pending view', async () =>
   assert.deepEqual(await t.call('pending', { sessionId: 's1' }), { ok: true, value: null })
   await t.show({ view: CHOICES })
   t.emit('s1', 'user/message', { source: { kind: 'user-question-reply' } })
+  assert.deepEqual(await t.call('pending', { sessionId: 's1' }), { ok: true, value: null })
+  await t.show({ view: CHOICES })
+  t.emit('s1', 'user/message', { source: { kind: 'deep-view-reply' } })
   assert.deepEqual(await t.call('pending', { sessionId: 's1' }), { ok: true, value: null })
   await t.stop()
 })
