@@ -9,9 +9,9 @@ for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputE
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const { createElement: h, act } = await import('react')
+const { createElement: h, act, Fragment } = await import('react')
 const { createRoot } = await import('react-dom/client')
-const { WidgetCard, ViewUi } = await import('../src/react/index.js')
+const { WidgetCard, ViewUi, useOptionKeys } = await import('../src/react/index.js')
 const { ViewsTail } = await import('../src/client/tail.js')
 const { ViewReplyNode, viewReplyRule } = await import('../src/client/reply-node.js')
 const { viewsDefinition } = await import('../src/client/views-definition.js')
@@ -174,4 +174,30 @@ test('a WidgetCard uses the dv- class names', async () => {
   assert.ok(box.querySelector('.dv-view'))
   assert.ok(box.querySelector('.dv-widget-metric'))
   await unmount()
+})
+
+// The exported key-card counter is shared, so a question card and a view card
+// using it at once both stay quiet instead of answering the same letter key.
+test('two cards sharing useOptionKeys listen only while one is open', async (t) => {
+  const picks = []
+  const ownRef = { current: null }
+  const Card = ({ tag }) => {
+    const hints = useOptionKeys(2, index => picks.push(`${tag}${index}`), ownRef)
+    return h('span', { className: `key-${tag}` }, hints ? 'on' : 'off')
+  }
+  const box = document.createElement('div')
+  document.body.appendChild(box)
+  const root = createRoot(box)
+  t.after(() => act(async () => { root.unmount(); box.remove() }))
+  const two = h(Fragment, null, h(Card, { tag: 'a' }), h(Card, { tag: 'b' }))
+  await act(async () => { root.render(h(ViewUi.Provider, { value: ui }, two)) })
+  assert.equal(box.querySelector('.key-a').textContent, 'off')
+  assert.equal(box.querySelector('.key-b').textContent, 'off')
+  const press = key => act(async () => { document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true })) })
+  await press('A')
+  assert.deepEqual(picks, [])
+  await act(async () => { root.render(h(ViewUi.Provider, { value: ui }, h(Card, { tag: 'a' }))) })
+  assert.equal(box.querySelector('.key-a').textContent, 'on')
+  await press('A')
+  assert.deepEqual(picks, ['a0'])
 })
