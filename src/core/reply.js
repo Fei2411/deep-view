@@ -69,9 +69,13 @@ export function viewAnswerText(view, answer) {
     let confirmLabel, cancelLabel
     eachNode(view, node => { if (node.id === answer.action) { confirmLabel = node.confirmLabel; cancelLabel = node.cancelLabel } })
     parts.push(values.confirmed ? (confirmLabel ?? 'Confirmed') : (cancelLabel ?? 'Cancelled'))
+  } else if (values.canceled === true) {
+    let cancelLabel
+    eachNode(view, node => { if (node.id === answer.action) cancelLabel = node.cancelLabel })
+    parts.push(cancelLabel ?? 'Cancelled')
   } else if (isRecord(values.fields)) {
     const labels = new Map()
-    eachNode(view, node => { for (const field of Array.isArray(node.fields) ? node.fields : []) labels.set(field?.id, field?.label ?? field?.id) })
+    eachNode(view, node => { for (const field of Array.isArray(node.fields) ? node.fields : []) labels.set(field?.id, field?.label || field?.id) })
     parts.push(...Object.entries(values.fields).map(([key, value]) => `${labels.get(key) ?? key}: ${value}`))
   }
   if (isRecord(values.inputs)) {
@@ -102,6 +106,7 @@ function actionSummary(answer, view) {
   let text
   if (Array.isArray(values.selected)) text = `selected: ${values.selected.join(', ')}`
   else if (typeof values.confirmed === 'boolean') text = values.confirmed ? 'confirmed' : 'cancelled'
+  else if (values.canceled === true) text = 'cancelled'
   else if (isRecord(values.fields)) text = Object.entries(values.fields).map(([key, value]) => `${key}: ${value}`).join('; ')
   else if (inputs !== '') text = ''
   else text = typeof answer.action === 'string' && answer.action !== '' ? answer.action : '(skipped)'

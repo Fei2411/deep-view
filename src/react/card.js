@@ -85,9 +85,10 @@ function SettledOptions({ node, answer }) {
       chosen.includes(option.label) ? h('span', { className: 'dv-q-check', title: ui.t('Selected') }, h(CheckIcon)) : null)))
 }
 
-function ConfirmInput({ node, onSubmit, busy = false }) {
+function ConfirmInput({ node, onSubmit, busy = false, footStart = null }) {
   const ui = useViewUi()
   return h('div', { className: 'dv-q-foot' },
+    footStart ? h('div', { className: 'dv-q-foot-start' }, footStart) : null,
     h('button', { type: 'button', className: 'dv-q-btn', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: false }) }, node.cancelLabel ?? ui.t('Cancel')),
     h('button', { type: 'button', className: 'dv-q-submit', disabled: busy, onClick: () => onSubmit?.(node.id, { confirmed: true }) }, node.confirmLabel ?? ui.t('Confirm')))
 }
@@ -104,40 +105,100 @@ function SettledConfirm({ node, answer }) {
   return h('span', { className: 'dv-q-badge' }, label)
 }
 
-function FormInput({ node, onSubmit, busy = false }) {
+function FormInput({ node, onSubmit, busy = false, footStart = null }) {
   const ui = useViewUi()
   const fields = fieldsOf(node)
-  const [draft, setDraft] = useState({})
-  const submit = () => { if (!busy) onSubmit?.(node.id, { fields: Object.fromEntries(fields.map(field => [field.id, draft[field.id] ?? ''])) }) }
+  const [draft, setDraft] = useState(() => Object.fromEntries(fields.map(field => [field.id, field.value ?? ''])))
+  const submit = () => {
+    if (!busy) onSubmit?.(node.id, { fields: Object.fromEntries(fields.map(field => [field.id, field.readOnly === true ? (field.value ?? '') : (draft[field.id] ?? '')])) })
+  }
+  const cancel = () => {
+    if (!busy) onSubmit?.(node.id, { canceled: true })
+  }
   return h('form', {
     className: 'dv-widget-form',
     onSubmit: (event) => { event.preventDefault(); submit() },
   },
-  fields.map(field => h('label', { key: field.id, className: 'dv-widget-field' },
-    h('span', { className: 'dv-widget-field-label' }, field.label),
+  fields.map((field) => {
+    const val = field.readOnly === true ? (field.value ?? '') : (draft[field.id] ?? '')
+    const hasLabel = typeof field.label === 'string' && field.label.trim() !== ''
+    const multiline = field.multiline === true
+    const readOnly = field.readOnly === true
+    const heading = !multiline && !hasLabel
+    const labelText = hasLabel ? field.label : (field.placeholder ?? field.id)
+    return h('label', {
+      key: field.id,
+      className: 'dv-widget-field',
+      'data-inline': !multiline && hasLabel ? '' : undefined,
+      'data-heading': heading ? '' : undefined,
+      'data-multiline': multiline ? '' : undefined,
+      'data-readonly': readOnly ? '' : undefined,
+    },
+    hasLabel ? h('span', { className: 'dv-widget-field-label' }, field.label) : null,
     h('span', { className: 'dv-q-field' },
-      h('input', {
-        className: 'dv-q-input', type: 'text', value: draft[field.id] ?? '',
-        autoComplete: 'off', spellCheck: false, readOnly: busy,
-        'aria-label': field.label, placeholder: field.placeholder ?? undefined,
-        onChange: (event) => { if (!busy) setDraft(current => ({ ...current, [field.id]: event.target.value })) },
-        onKeyDown: (event) => {
-          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-          event.preventDefault()
-          submit()
-        },
-      })))),
-  h('div', { className: 'dv-q-foot' }, h('button', { type: 'submit', className: 'dv-q-submit', disabled: busy }, node.submitLabel ?? ui.t('Submit'))))
+      multiline
+        ? h('textarea', {
+          className: 'dv-q-input dv-q-textarea',
+          rows: Math.min(10, Math.max(3, (val.match(/\n/g)?.length ?? 0) + 1)),
+          value: val,
+          autoComplete: 'off', spellCheck: false, readOnly: busy || readOnly,
+          'aria-label': labelText, placeholder: field.placeholder ?? undefined,
+          onChange: (event) => { if (!busy && !readOnly) setDraft(current => ({ ...current, [field.id]: event.target.value })) },
+          onKeyDown: (event) => {
+            if (event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey) || event.nativeEvent?.isComposing) return
+            event.preventDefault()
+            submit()
+          },
+        })
+        : h('input', {
+          className: 'dv-q-input', type: 'text', value: val,
+          autoComplete: 'off', spellCheck: false, readOnly: busy || readOnly,
+          'aria-label': labelText, placeholder: field.placeholder ?? undefined,
+          onChange: (event) => { if (!busy && !readOnly) setDraft(current => ({ ...current, [field.id]: event.target.value })) },
+          onKeyDown: (event) => {
+            if (event.key !== 'Enter' || event.nativeEvent?.isComposing) return
+            event.preventDefault()
+            submit()
+          },
+        })))
+  }),
+  h('div', { className: 'dv-q-foot' },
+    footStart ? h('div', { className: 'dv-q-foot-start' }, footStart) : null,
+    node.cancelLabel ? h('button', { type: 'button', className: 'dv-q-btn', disabled: busy, onClick: cancel }, node.cancelLabel) : null,
+    h('button', { type: 'submit', className: 'dv-q-submit', disabled: busy }, node.submitLabel ?? ui.t('Submit'))))
 }
 
 function SettledForm({ node, answer }) {
-  const fields = answerValues(answer, node)?.fields
+  const ui = useViewUi()
+  const ans = answerValues(answer, node)
+  const fields = ans?.fields
   const values = fields !== null && typeof fields === 'object' ? fields : {}
+  const canceled = ans?.canceled === true
+  const badge = canceled
+    ? (node.cancelLabel ?? ui.t('Cancel'))
+    : (node.cancelLabel !== undefined && ans !== undefined ? (node.submitLabel ?? ui.t('Submit')) : null)
   return h('div', { className: 'dv-widget-form' },
-    fieldsOf(node).map(field => h('label', { key: field.id, className: 'dv-widget-field' },
-      h('span', { className: 'dv-widget-field-label' }, field.label),
+    fieldsOf(node).map((field) => {
+      const val = values[field.id] ?? field.value ?? ''
+      const hasLabel = typeof field.label === 'string' && field.label.trim() !== ''
+      const multiline = field.multiline === true
+      const heading = !multiline && !hasLabel
+      const labelText = hasLabel ? field.label : (field.placeholder ?? field.id)
+      return h('label', {
+        key: field.id,
+        className: 'dv-widget-field',
+        'data-inline': !multiline && hasLabel ? '' : undefined,
+        'data-heading': heading ? '' : undefined,
+        'data-multiline': multiline ? '' : undefined,
+        'data-readonly': field.readOnly === true ? '' : undefined,
+      },
+      hasLabel ? h('span', { className: 'dv-widget-field-label' }, field.label) : null,
       h('span', { className: 'dv-q-field' },
-        h('input', { className: 'dv-q-input', type: 'text', value: values[field.id] ?? '', disabled: true, readOnly: true, 'aria-label': field.label })))))
+        multiline
+          ? h('textarea', { className: 'dv-q-input dv-q-textarea', rows: Math.min(10, Math.max(2, (val.match(/\n/g)?.length ?? 0) + 1)), value: val, disabled: true, readOnly: true, 'aria-label': labelText })
+          : h('input', { className: 'dv-q-input', type: 'text', value: val, disabled: true, readOnly: true, 'aria-label': labelText })))
+    }),
+    badge ? h('div', { className: 'dv-q-foot' }, h('span', { className: 'dv-q-badge' }, badge)) : null)
 }
 
 function SubmitInput({ node, ctx }) {
@@ -312,8 +373,8 @@ function WidgetNode({ node, ctx }) {
     case 'toggle': return h(ToggleInput, { node, ctx })
     case 'submit': return h(SubmitInput, { node, ctx })
     case 'options': return ctx.settled ? h(SettledOptions, { node, answer: ctx.answer }) : h(OptionsInput, { node, onSubmit: ctx.onSubmit, keys: ctx.keys, busy: ctx.busy })
-    case 'confirm': return ctx.settled ? h(SettledConfirm, { node, answer: ctx.answer }) : h(ConfirmInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy })
-    case 'form': return ctx.settled ? h(SettledForm, { node, answer: ctx.answer }) : h(FormInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy })
+    case 'confirm': return ctx.settled ? h(SettledConfirm, { node, answer: ctx.answer }) : h(ConfirmInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy, footStart: ctx.footStart })
+    case 'form': return ctx.settled ? h(SettledForm, { node, answer: ctx.answer }) : h(FormInput, { node, onSubmit: ctx.onSubmit, busy: ctx.busy, footStart: ctx.footStart })
     default: return null
   }
 }
@@ -322,14 +383,14 @@ function WidgetNode({ node, ctx }) {
 // them as they were sent. Every answer carries the inputs' values. Letter keys
 // answer a lone options block from the keyboard; with more than one in a card the
 // same letter would hit both.
-export function WidgetView({ view, onSubmit, settled = false, answer = null, busy = false, registerChart, refreshCharts }) {
+export function WidgetView({ view, onSubmit, settled = false, answer = null, busy = false, footStart = null, registerChart, refreshCharts }) {
   const inputs = viewInputs(view)
   const [values, setValues] = useState(() => Object.fromEntries(inputs.map(node => [node.id, inputDefault(node)])))
   const sent = answer?.values?.inputs
   const current = settled && sent !== null && typeof sent === 'object' ? { ...values, ...sent } : values
   const submit = (action, extra) => onSubmit?.(action, inputs.length > 0 ? { ...extra, inputs: current } : extra)
   const ctx = {
-    onSubmit: submit, settled, answer, busy, keys: !settled && countType(view, 'options') === 1,
+    onSubmit: submit, settled, answer, busy, footStart, keys: !settled && countType(view, 'options') === 1,
     lookup: viewScope(view, current), values: current, locked: settled || busy,
     setInput: (id, value) => setValues(before => ({ ...before, [id]: value })), registerChart, refreshCharts,
   }
@@ -392,14 +453,15 @@ function ViewMenu({ charts }) {
 // What every view wears. A view with controls is a light card; one that only shows
 // sits in the reply without a frame. The title is an optional small heading, and a
 // view that still waits for its answer has a dismiss button.
-export function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, raised = false, settled = false, answer = null }) {
+export function WidgetCard({ title, icon, footStart, view, onSubmit, onDismiss, busy = false, raised = false, settled = false, answer = null }) {
   const ui = useViewUi()
   const titleId = useId()
   const { charts, registerChart, refreshCharts } = useChartHandles()
   const framed = raised || hasControls(view)
   const className = ['dv-view', framed ? 'dv-q' : 'dv-view-bare', settled ? 'dv-q-settled' : '', raised ? 'dv-q-raised' : ''].filter(Boolean).join(' ')
-  const head = title || onDismiss || countType(view, 'chart') > 0
+  const head = title || icon || onDismiss || countType(view, 'chart') > 0
     ? h('div', { className: 'dv-view-head' },
+      icon ? h('span', { className: 'dv-view-icon', 'aria-hidden': true }, icon) : null,
       title ? h('p', { className: 'dv-view-title', id: titleId }, title) : h('span', { className: 'dv-view-title' }),
       countType(view, 'chart') > 0 ? h(ViewMenu, { charts }) : null,
       onDismiss ? h('button', { type: 'button', className: 'dv-q-x', 'aria-label': ui.t('Dismiss view'), title: ui.t('Dismiss'), onClick: onDismiss, disabled: busy }, h(CloseIcon)) : null)
@@ -408,7 +470,7 @@ export function WidgetCard({ title, view, onSubmit, onDismiss, busy = false, rai
     className, role: 'group', 'aria-labelledby': title ? titleId : undefined, 'aria-label': title ? undefined : ui.t('View'), 'aria-busy': busy || undefined,
   },
   head,
-  h('div', { className: 'dv-view-body' }, h(WidgetView, { view, onSubmit, settled, answer, busy, registerChart, refreshCharts })))
+  h('div', { className: 'dv-view-body' }, h(WidgetView, { view, onSubmit, settled, answer, busy, footStart: settled ? null : footStart, registerChart, refreshCharts })))
 }
 
 // An answered view rides on the reply message itself: the settled card, read-only.
@@ -430,7 +492,9 @@ export function AnsweredView({ node }) {
 export const WIDGET_CSS = `
 .dv-view{min-width:0}
 .dv-view-bare{display:flex;flex-direction:column;gap:8px;width:100%;color:var(--dv-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;animation:dv-veil-in .2s ease-out backwards}
-.dv-view-head{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.dv-view-head{display:flex;align-items:center;gap:8px;min-width:0}
+.dv-view-icon{flex:none;width:22px;height:22px;border-radius:6px;background:var(--dv-hover);color:var(--dv-ink-2);display:inline-flex;align-items:center;justify-content:center}
+.dv-view-icon svg{width:14px;height:14px}
 .dv-view-title{flex:1 1 0;min-width:0;margin:0;font-size:13px;line-height:18px;font-weight:500;color:var(--dv-ink);overflow-wrap:anywhere}
 .dv-q-settled .dv-view-title{color:var(--dv-ink-2)}
 .dv-view-tools{position:relative;flex:none;align-self:flex-start;opacity:0;transition:opacity .12s ease}
@@ -466,6 +530,14 @@ export const WIDGET_CSS = `
 .dv-widget-field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .dv-widget-field-label{font-size:12px;line-height:16px;color:var(--dv-ink-2)}
 .dv-widget-field .dv-q-field:has(.dv-q-input:disabled){cursor:default;opacity:.75}
+.dv-widget-field[data-inline]{flex-direction:row;align-items:center;gap:12px;padding:7px 0;border-bottom:.5px solid var(--dv-line)}
+.dv-widget-field[data-inline] .dv-widget-field-label{flex:none;min-width:44px;font-size:13px;line-height:20px}
+.dv-widget-field[data-inline] .dv-q-field{border:0;border-radius:0;padding:0;min-height:20px;background:none}
+.dv-widget-field[data-inline][data-readonly] .dv-q-input{color:var(--dv-ink-2);cursor:default}
+.dv-widget-field[data-heading] .dv-q-field{border:0;border-radius:0;padding:2px 0;min-height:24px;background:none}
+.dv-widget-field[data-heading] .dv-q-input{font-size:16px;line-height:22px;font-weight:600}
+.dv-widget-field[data-multiline]:not(:has(.dv-widget-field-label)) .dv-q-field{border:0;border-radius:0;padding:4px 0;background:none}
+.dv-q-textarea{max-height:240px;overflow-y:auto;line-height:22px}
 .dv-widget-progress{display:flex;flex-direction:column;gap:5px;min-width:0}
 .dv-widget-progress-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:16px;color:var(--dv-ink-2);font-variant-numeric:tabular-nums}
 .dv-widget-progress-name{color:var(--dv-ink);font-weight:500}

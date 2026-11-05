@@ -81,6 +81,22 @@ test('validateView enforces table, options, form, depth, node, and id limits', (
   assert.match(validateView({ type: 'form', id: 'ask', fields: [{ id: 'name', label: 'Name' }, { id: 'name', label: 'Again' }] }).error, /duplicate field id "name"/)
   // A field id may match the form's own id: the two namespaces are separate.
   assert.equal(validateView({ type: 'form', id: 'name', fields: [{ id: 'name', label: 'Name' }] }).ok, true)
+  // Form fields accept value, multiline, readOnly, and the form accepts cancelLabel.
+  const draftForm = {
+    type: 'form', id: 'mail', submitLabel: 'Send', cancelLabel: 'Discard',
+    fields: [
+      { id: 'subject', label: '', value: 'Hello', placeholder: 'Subject' },
+      { id: 'from', label: 'From', value: 'me@example.com', readOnly: true },
+      { id: 'zip', label: 'Zip', value: '02139' },
+      { id: 'body', label: '', value: 'Line 1\nLine 2', multiline: true },
+    ],
+  }
+  assert.deepEqual(validateView( normalizeView(draftForm)), { ok: true, interactive: true })
+  assert.equal(normalizeView(draftForm).fields[2].value, '02139', 'form field value stays a string even when numeric')
+  assert.match(validateView({ type: 'form', id: 'f', cancelLabel: 3, fields: [] }).error, /cancelLabel: expected a string/)
+  assert.match(validateView({ type: 'form', id: 'f', fields: [{ id: 'a', label: 'A', value: 12 }] }).error, /fields\[0\]\.value: expected a string/)
+  assert.match(validateView({ type: 'form', id: 'f', fields: [{ id: 'a', label: 'A', multiline: 'yes' }] }).error, /fields\[0\]\.multiline: expected a boolean/)
+  assert.match(validateView({ type: 'form', id: 'f', fields: [{ id: 'a', label: 'A', readOnly: 1 }] }).error, /fields\[0\]\.readOnly: expected a boolean/)
 
   let deep = text()
   for (let level = 1; level < 8; level += 1) deep = stack(deep)
@@ -170,6 +186,9 @@ test('validateViewAnswer checks the submitted component and keeps the question-c
   assert.match(validateViewAnswer(view, 'go', { confirmed: 'yes' }).error, /values\.confirmed: expected a boolean/)
   assert.deepEqual(validateViewAnswer(view, 'ask', { fields: {} }), { fields: {} })
   assert.deepEqual(validateViewAnswer(view, 'ask', { fields: { name: '', note: 'hi' } }), { fields: { name: '', note: 'hi' } })
+  assert.deepEqual(validateViewAnswer(view, 'ask', { canceled: true }), { canceled: true })
+  const lockedForm = { type: 'form', id: 'draft', fields: [{ id: 'from', label: 'From', value: 'me@example.com', readOnly: true }, { id: 'to', label: 'To', value: 'a@example.com' }] }
+  assert.deepEqual(validateViewAnswer(lockedForm, 'draft', { fields: { from: 'spoof@example.com', to: 'new@example.com' } }), { fields: { from: 'me@example.com', to: 'new@example.com' } })
   assert.match(validateViewAnswer(view, 'ask', { fields: { other: 'x' } }).error, /unknown field; allowed: name, note/)
   assert.match(validateViewAnswer(view, 'ask', { fields: { name: 'x'.repeat(2001) } }).error, /2001 characters exceeds the limit of 2000/)
   assert.match(validateViewAnswer(view, 'missing', { selected: ['A'] }).error, /no interactive component with id "missing"; allowed: pick, many, go, ask/)

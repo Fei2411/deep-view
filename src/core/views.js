@@ -33,9 +33,10 @@ const PROPS = {
   number: ['id', 'label', 'min', 'max', 'step', 'value', 'unit'],
   options: ['id', 'options', 'multi'],
   confirm: ['id', 'confirmLabel', 'cancelLabel'],
-  form: ['id', 'fields', 'submitLabel'],
+  form: ['id', 'fields', 'submitLabel', 'cancelLabel'],
   submit: ['id', 'label'],
 }
+const FIELD_PROPS = ['id', 'label', 'placeholder', 'value', 'multiline', 'readOnly']
 const MAX_DEPTH = 8
 const MAX_NODES = 64
 const MAX_CHILDREN = 16
@@ -74,20 +75,20 @@ const numeric = value => (typeof value === 'string' && value.trim() !== '' && !N
 // not asked to retry a call whose only fault is the provider's encoding.
 // Arrays are unwrapped; numeric fields and chart values accept a numeric string.
 // Returns a new object; the input is not mutated.
-export function normalizeView(value) {
-  if (Array.isArray(value)) return value.map(normalizeView)
+export function normalizeView(value, inFormFields = false) {
+  if (Array.isArray(value)) return value.map(item => normalizeView(item, inFormFields))
   if (!isRecord(value)) return value
   const keys = Object.keys(value)
   // Unwrap recursively: a provider may nest the wrapper, as { item: { item: [...] } }.
   if (keys.length === 1 && keys[0] === 'item') {
-    const inner = normalizeView(value.item)
+    const inner = normalizeView(value.item, inFormFields)
     if (Array.isArray(inner)) return inner
   }
   // Define own properties: an incoming "__proto__" key must become data the
   // validator can reject, not hit the prototype setter and vanish from the JSON.
   const out = {}
-  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key]), writable: true, enumerable: true, configurable: true })
-  for (const field of NUMERIC) if (Object.hasOwn(out, field)) out[field] = numeric(out[field])
+  for (const key of keys) Object.defineProperty(out, key, { value: normalizeView(value[key], inFormFields || key === 'fields'), writable: true, enumerable: true, configurable: true })
+  for (const field of NUMERIC) if ((field !== 'value' || !inFormFields) && Object.hasOwn(out, field)) out[field] = numeric(out[field])
   if (Array.isArray(out.values)) out.values = out.values.map(numeric)
   return out
 }
@@ -394,6 +395,7 @@ function checkForm(node, path, ctx) {
   const idError = checkId(node, path, ctx)
   if (idError !== undefined) return idError
   if (node.submitLabel !== undefined && typeof node.submitLabel !== 'string') return `${path}.submitLabel: expected a string`
+  if (node.cancelLabel !== undefined && typeof node.cancelLabel !== 'string') return `${path}.cancelLabel: expected a string`
   if (!Array.isArray(node.fields)) return `${path}.fields: expected an array of at most ${MAX_FIELDS} fields`
   if (node.fields.length > MAX_FIELDS) return `${path}.fields: ${node.fields.length} fields exceeds the limit of ${MAX_FIELDS}`
   const seen = new Set()
@@ -402,7 +404,7 @@ function checkForm(node, path, ctx) {
     const at = `${path}.fields[${index}]`
     if (!isRecord(field)) return `${at}: expected a field object`
     for (const key of Object.keys(field)) {
-      if (key !== 'id' && key !== 'label' && key !== 'placeholder') return `${at}.${key}: unknown property ${quoted(key)}; allowed: id, label, placeholder`
+      if (!FIELD_PROPS.includes(key)) return `${at}.${key}: unknown property ${quoted(key)}; allowed: ${allowed(FIELD_PROPS)}`
     }
     if (typeof field.id !== 'string' || field.id === '') return `${at}.id: expected a non-empty string`
     if (field.id === '__proto__') return `${at}.id: "__proto__" cannot be an id`
@@ -410,6 +412,12 @@ function checkForm(node, path, ctx) {
     seen.add(field.id)
     if (typeof field.label !== 'string') return `${at}.label: expected a string`
     if (field.placeholder !== undefined && typeof field.placeholder !== 'string') return `${at}.placeholder: expected a string`
+    if (field.value !== undefined) {
+      if (typeof field.value !== 'string') return `${at}.value: expected a string`
+      if (field.value.length > MAX_TEXT) return `${at}.value: ${field.value.length} characters exceeds the limit of ${MAX_TEXT}`
+    }
+    if (field.multiline !== undefined && typeof field.multiline !== 'boolean') return `${at}.multiline: expected a boolean`
+    if (field.readOnly !== undefined && typeof field.readOnly !== 'boolean') return `${at}.readOnly: expected a boolean`
   }
   return undefined
 }
@@ -575,7 +583,7 @@ function componentSummary(node, lookup) {
     case 'slider': case 'number': case 'choice': case 'toggle': return `${node.type}: ${node.label}=${inputText(node, inputDefault(node))}`
     case 'options': return `options: ${(Array.isArray(node.options) ? node.options : []).map(option => option?.label).filter(Boolean).join('/')}`
     case 'confirm': return 'confirm'
-    case 'form': return `form: ${(Array.isArray(node.fields) ? node.fields : []).map(field => field?.label ?? field?.id).filter(Boolean).join('/')}`
+    case 'form': return `form: ${(Array.isArray(node.fields) ? node.fields : []).map(field => field?.label || field?.id).filter(Boolean).join('/')}`
     case 'submit': return `submit: ${node.label ?? 'Send'}`
     default: return undefined
   }
@@ -671,15 +679,19 @@ function validateConfirm(values) {
 }
 
 function validateForm(node, values) {
+  if (values.canceled === true) return { canceled: true }
   if (!isRecord(values.fields)) return { error: 'values.fields: expected an object of field ids to strings' }
-  const declared = (node.fields ?? []).map(field => field?.id).filter(id => typeof id === 'string')
+  const declaredFields = (node.fields ?? []).filter(field => typeof field?.id === 'string')
+  const declared = declaredFields.map(field => field.id)
+  const byId = new Map(declaredFields.map(field => [field.id, field]))
   const allowedIds = new Set(declared)
   const fields = {}
   for (const [key, value] of Object.entries(values.fields)) {
     if (!allowedIds.has(key)) return { error: `values.fields.${key}: unknown field; allowed: ${allowed(declared)}` }
     if (typeof value !== 'string') return { error: `values.fields.${key}: expected a string` }
     if (value.length > MAX_TEXT) return { error: `values.fields.${key}: ${value.length} characters exceeds the limit of ${MAX_TEXT}` }
-    fields[key] = value
+    const spec = byId.get(key)
+    fields[key] = spec?.readOnly === true ? (spec.value ?? '') : value
   }
   return { fields }
 }

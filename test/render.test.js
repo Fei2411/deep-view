@@ -188,6 +188,46 @@ test('a WidgetCard uses the dv- class names', async () => {
   await unmount()
 })
 
+test('a form card renders prefilled, readOnly, and multiline fields, footStart, and cancelLabel', async () => {
+  const draft = {
+    type: 'form', id: 'mail', submitLabel: 'Send', cancelLabel: 'Discard',
+    fields: [
+      { id: 'subject', label: '', value: 'Hello team', placeholder: 'Subject' },
+      { id: 'from', label: 'From', value: 'me@example.com', readOnly: true },
+      { id: 'to', label: 'To', value: 'you@example.com' },
+      { id: 'body', label: '', value: 'Line 1\nLine 2', multiline: true },
+    ],
+  }
+  const submitted = []
+  const { box, unmount } = await render(h(WidgetCard, {
+    title: 'Mail',
+    icon: h('svg', { className: 'mail-ic' }),
+    footStart: h('span', { className: 'rule-pick' }, 'Require approval'),
+    view: draft,
+    onSubmit: (action, values) => submitted.push([action, values]),
+  }))
+  assert.ok(box.querySelector('.dv-view-icon .mail-ic'), 'header icon rendered')
+  assert.equal(box.querySelector('.dv-q-foot-start .rule-pick')?.textContent, 'Require approval')
+  const inputs = [...box.querySelectorAll('input.dv-q-input')]
+  assert.equal(inputs.length, 3)
+  assert.equal(inputs[0].value, 'Hello team')
+  assert.equal(inputs[1].value, 'me@example.com')
+  assert.equal(inputs[1].readOnly, true)
+  assert.equal(inputs[2].value, 'you@example.com')
+  const area = box.querySelector('textarea.dv-q-textarea')
+  assert.ok(area, 'multiline textarea rendered')
+  assert.equal(area.value, 'Line 1\nLine 2')
+  await act(async () => {
+    box.querySelector('button.dv-q-submit').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  })
+  assert.deepEqual(submitted, [['mail', { fields: { subject: 'Hello team', from: 'me@example.com', to: 'you@example.com', body: 'Line 1\nLine 2' } }]])
+  await act(async () => {
+    box.querySelector('button.dv-q-btn').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  })
+  assert.deepEqual(submitted[1], ['mail', { canceled: true }])
+  await unmount()
+})
+
 // The exported key-card counter is shared, so a question card and a view card
 // using it at once both stay quiet instead of answering the same letter key.
 test('two cards sharing useOptionKeys listen only while one is open', async (t) => {

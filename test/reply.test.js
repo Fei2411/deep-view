@@ -44,6 +44,10 @@ test('viewAnswerText: confirm shows the confirm or cancel label', () => {
 test('viewAnswerText: form shows label: value pairs', () => {
   const reply = viewReply({ ...record, view: FORM }, 'info', { fields: { name: 'Ada', note: 'ship friday' } }, 'user')
   assert.equal(viewAnswerText(FORM, readViewReply(reply.text).answers[0]), 'Name: Ada; Note: ship friday')
+  const draft = { type: 'form', id: 'mail', submitLabel: 'Send', cancelLabel: 'Discard', fields: [{ id: 'subject', label: '', value: 'Hi' }] }
+  const canceled = viewReply({ ...record, view: draft }, 'mail', { canceled: true }, 'user')
+  assert.equal(viewAnswerText(draft, readViewReply(canceled.text).answers[0]), 'Discard')
+  assert.match(viewReplyText(canceled.text), /Answer: cancelled/)
 })
 
 test('viewAnswerText: submitted inputs show label=value', () => {

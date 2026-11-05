@@ -74,7 +74,8 @@ button.dv-q-opt:active{background:var(--dv-active)}
 .dv-q-submit:disabled{opacity:.4;cursor:default}
 .dv-q-btn{background:var(--dv-hover);color:var(--dv-ink)}
 .dv-q-btn:hover{background:var(--dv-active)}
-.dv-q-foot{display:flex;justify-content:flex-end;gap:8px}
+.dv-q-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.dv-q-foot-start{margin-right:auto;display:flex;align-items:center}
 .dv-menu{position:fixed;pointer-events:auto;z-index:60;min-width:200px;padding:6px;border-radius:12px;background:var(--dv-main);border:.5px solid var(--dv-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1),0 0 0 1px rgba(228,228,228,.04);display:flex;flex-direction:column;gap:2px;transform-origin:var(--dv-origin,top left);animation:dv-veil-in .14s ease-out;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
 .dv-menu.dv-view-menu{position:absolute;z-index:4}
 .dv-menu button{display:flex;align-items:center;gap:4px;width:100%;min-height:30px;text-align:left;border:0;background:none;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;line-height:18px;color:var(--dv-ink);cursor:pointer;box-sizing:border-box}
