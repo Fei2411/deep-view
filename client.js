@@ -2211,8 +2211,9 @@ var WIDGET_CSS = `
 .dv-widget-field[data-inline][data-readonly] .dv-q-input{color:var(--dv-ink-2);cursor:default}
 .dv-widget-field[data-heading] .dv-q-field{border:0;border-radius:0;padding:2px 0;min-height:24px;background:none}
 .dv-widget-field[data-heading] .dv-q-input{font-size:16px;line-height:22px;font-weight:600}
+.dv-widget-field[data-multiline] .dv-q-field{flex:1 1 auto}
 .dv-widget-field[data-multiline]:not(:has(.dv-widget-field-label)) .dv-q-field{border:0;border-radius:0;padding:4px 0;background:none}
-.dv-q-textarea{max-height:240px;overflow-y:auto;line-height:22px}
+.dv-q-textarea{field-sizing:content;min-height:66px;max-height:240px;overflow-y:auto;line-height:22px}
 .dv-widget-progress{display:flex;flex-direction:column;gap:5px;min-width:0}
 .dv-widget-progress-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:16px;color:var(--dv-ink-2);font-variant-numeric:tabular-nums}
 .dv-widget-progress-name{color:var(--dv-ink);font-weight:500}
