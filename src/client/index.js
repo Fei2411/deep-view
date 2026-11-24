@@ -34,6 +34,8 @@ const en = {
   'Progress': 'Progress',
   'Your answer': 'Your answer',
   'This view tried to open a page and was stopped.': 'This view tried to open a page and was stopped.',
+  'Fullscreen': 'Fullscreen',
+  'Exit fullscreen': 'Exit fullscreen',
   '(skipped)': '(skipped)',
 }
 const zh = {
@@ -60,6 +62,8 @@ const zh = {
   'Progress': '进度',
   'Your answer': '你的回答',
   'This view tried to open a page and was stopped.': '此视图试图打开页面，已被停止。',
+  'Fullscreen': '全屏',
+  'Exit fullscreen': '退出全屏',
   '(skipped)': '（已跳过）',
 }
 

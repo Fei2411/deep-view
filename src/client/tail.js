@@ -68,7 +68,9 @@ const InteractiveView = ({ callId, sessionId, useConversation }) => {
 }
 
 const TailView = ({ call, sessionId, useConversation }) => {
-  const shown = checkShownView(call.args?.title, call.args?.view)
+  // Replay keeps structural validation while allowing historical accepted HTML
+  // cards created before strict vh / root-100% sizing rules (clamped at render).
+  const shown = checkShownView(call.args?.title, call.args?.view, { strictHtmlSizing: false })
   if (shown.error !== undefined) return null
   // The same refusal rules the tool applied: a call that showed no card draws none.
   if (!shown.interactive && call.args?.await_reply === true) return null

@@ -25,9 +25,8 @@ body{
 --dv-ink-rose:var(--dsw-alias-state-error-primary);
 --dv-ink-yellow:var(--dsw-alias-state-warn-label,var(--dsw-alias-state-warn-primary));
 --dv-ink-cyan:var(--dsw-alias-state-success-tertiary,var(--dsw-alias-state-success-primary));
---dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary));
-color-scheme:light}
-body[data-ds-dark-theme]{color-scheme:dark}
+--dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary))}
+body[data-ds-dark-theme],html.dark body,html[data-theme=dark] body{color-scheme:dark}
 .dv-q-inline .dv-view{max-width:100%}
 `
 

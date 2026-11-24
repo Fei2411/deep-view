@@ -46,6 +46,7 @@ var CheckIcon = lineIcon(["M4.5 10.5l3.5 3.5 7.5-8"]);
 var DownloadIcon = lineIcon(["M10 3.5v9", "M6.5 9.5L10 13l3.5-3.5", "M4 16h12"]);
 var CopyIcon = lineIcon(["M8.5 7h6A1.5 1.5 0 0 1 16 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 7 14.5v-6A1.5 1.5 0 0 1 8.5 7z", "M4 12.5V5.5A1.5 1.5 0 0 1 5.5 4H13"]);
 var InfoIcon = lineIcon(["M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M10 9.25v4", "M10 6.6h.01"]);
+var ExpandIcon = lineIcon(["M12.5 3.5h4v4", "M7.5 16.5h-4v-4", "M16.5 3.5l-4.75 4.75", "M3.5 16.5l4.75-4.75"]);
 function CloseIcon() {
   return (0, import_react.createElement)("svg", { width: 16, height: 16, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react.createElement)("path", { d: "M5 5l10 10M15 5L5 15", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
 }
@@ -448,12 +449,12 @@ function normalizeView(value, inFormFields = false) {
   if (Array.isArray(out.values)) out.values = out.values.map(numeric);
   return out;
 }
-function validateView(view) {
-  const ctx = { ids: /* @__PURE__ */ new Set(), nodes: 0, interactive: false, inputs: /* @__PURE__ */ new Map(), lets: /* @__PURE__ */ new Map(), formulas: [] };
+function validateView(view, { strictHtmlSizing = true } = {}) {
+  const ctx = { ids: /* @__PURE__ */ new Set(), nodes: 0, interactive: false, inputs: /* @__PURE__ */ new Map(), lets: /* @__PURE__ */ new Map(), formulas: [], strictHtmlSizing };
   const error = checkNode(view, "view", 1, ctx) ?? checkFormulas(ctx);
   return error === void 0 ? { ok: true, interactive: ctx.interactive } : { ok: false, error };
 }
-function checkShownView(title, sent) {
+function checkShownView(title, sent, options = {}) {
   let bytes;
   try {
     bytes = viewBytes(title, sent);
@@ -464,7 +465,7 @@ function checkShownView(title, sent) {
   if (title !== void 0 && title !== null && typeof title !== "string") return { error: "title: expected a string" };
   const named = String(title ?? "").trim();
   const view = normalizeView(sent);
-  const checked = validateView(view);
+  const checked = validateView(view, options);
   if (!checked.ok) return { error: checked.error };
   return { title: named, view, interactive: checked.interactive };
 }
@@ -500,7 +501,7 @@ function checkNode(node, path, depth, ctx) {
     case "sources":
       return checkSources(node, path);
     case "html":
-      return checkHtml(node, path);
+      return checkHtml(node, path, ctx);
     case "slider":
     case "number":
       return checkNumberInput(node, path, ctx);
@@ -649,8 +650,370 @@ function checkSources(node, path) {
   }
   return void 0;
 }
-function checkHtml(node, path) {
+var VIEWPORT_HEIGHT_UNIT = /(?<![\w.-])(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i;
+var ROOT_PERCENT_VALUE = /^100(?:\.0+)?%$/;
+var SKIP_AT_RULE = /^@(?:(?:-webkit-|-moz-)?keyframes|font-face|page)\b/i;
+var LEGACY_PSEUDO_ELEMENTS = /* @__PURE__ */ new Set(["before", "after", "first-line", "first-letter"]);
+var RAW_TEXT_TAGS = /* @__PURE__ */ new Set(["style", "script", "textarea", "title"]);
+var isAsciiSpace = (code) => code === 32 || code === 9 || code === 10 || code === 12 || code === 13;
+var isTagNameChar = (code) => code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45 || code === 58;
+var isIdentChar = (code) => code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45 || code === 95;
+var asciiLower = (text) => text.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
+function extractHtmlCss(html) {
+  const parts = [];
+  const lower = asciiLower(html);
+  const len = html.length;
+  let i = 0;
+  while (i < len) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) break;
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      i = end === -1 ? len : end + 3;
+      continue;
+    }
+    let p = lt + 1;
+    if (p >= len || !isTagNameChar(html.charCodeAt(p))) {
+      i = lt + 1;
+      continue;
+    }
+    const nameStart = p;
+    while (p < len && isTagNameChar(html.charCodeAt(p))) p += 1;
+    const tag = lower.slice(nameStart, p);
+    const isRoot = tag === "html" || tag === "body";
+    let selfClosing = false;
+    while (p < len) {
+      while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1;
+      if (p >= len) break;
+      const ch = html.charCodeAt(p);
+      if (ch === 62) {
+        p += 1;
+        break;
+      }
+      if (ch === 47) {
+        if (p + 1 < len && html.charCodeAt(p + 1) === 62) {
+          selfClosing = true;
+          p += 2;
+          break;
+        }
+        p += 1;
+        continue;
+      }
+      const attrStart = p;
+      while (p < len) {
+        const c = html.charCodeAt(p);
+        if (isAsciiSpace(c) || c === 61 || c === 62 || c === 47) break;
+        p += 1;
+      }
+      const attr = lower.slice(attrStart, p);
+      while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1;
+      let value = null;
+      if (p < len && html.charCodeAt(p) === 61) {
+        p += 1;
+        while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1;
+        if (p < len) {
+          const q = html.charCodeAt(p);
+          if (q === 34 || q === 39) {
+            const valStart = p + 1;
+            const close = html.indexOf(q === 34 ? '"' : "'", valStart);
+            if (close === -1) {
+              value = html.slice(valStart);
+              p = len;
+            } else {
+              value = html.slice(valStart, close);
+              p = close + 1;
+            }
+          } else {
+            const valStart = p;
+            while (p < len) {
+              const c = html.charCodeAt(p);
+              if (isAsciiSpace(c) || c === 62) break;
+              p += 1;
+            }
+            value = html.slice(valStart, p);
+          }
+        }
+      }
+      if (attr === "style" && value) parts.push({ css: value, isStyleBlock: false, isRootElement: isRoot });
+    }
+    if (RAW_TEXT_TAGS.has(tag) && !selfClosing) {
+      const bodyStart = p;
+      const closeTag = `</${tag}`;
+      let closeAt = -1;
+      let search = bodyStart;
+      while (search < len) {
+        const idx = lower.indexOf(closeTag, search);
+        if (idx === -1) break;
+        const after = idx + closeTag.length;
+        if (after >= len || isAsciiSpace(html.charCodeAt(after)) || html.charCodeAt(after) === 62 || html.charCodeAt(after) === 47) {
+          closeAt = idx;
+          break;
+        }
+        search = idx + 1;
+      }
+      const end = closeAt === -1 ? len : closeAt;
+      if (tag === "style") parts.push({ css: html.slice(bodyStart, end), isStyleBlock: true, isRootElement: false });
+      if (closeAt === -1) i = len;
+      else {
+        const closeGt = html.indexOf(">", closeAt + closeTag.length);
+        i = closeGt === -1 ? len : closeGt + 1;
+      }
+      continue;
+    }
+    i = p;
+  }
+  return parts;
+}
+function stripCssNoise(css) {
+  const len = css.length;
+  let out = "";
+  let i = 0;
+  while (i < len) {
+    const ch = css.charCodeAt(i);
+    if (ch === 47 && i + 1 < len && css.charCodeAt(i + 1) === 42) {
+      const end = css.indexOf("*/", i + 2);
+      out += " ";
+      i = end === -1 ? len : end + 2;
+      continue;
+    }
+    if (ch === 34 || ch === 39) {
+      out += '""';
+      i += 1;
+      while (i < len) {
+        const c = css.charCodeAt(i);
+        if (c === 92) {
+          i += 2;
+          continue;
+        }
+        if (c === ch) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+    if ((ch === 117 || ch === 85) && i + 3 < len && asciiLower(css.slice(i, i + 4)) === "url(" && (i === 0 || !isIdentChar(css.charCodeAt(i - 1)))) {
+      let j = i + 4;
+      while (j < len && isAsciiSpace(css.charCodeAt(j))) j += 1;
+      if (j < len && css.charCodeAt(j) !== 34 && css.charCodeAt(j) !== 39) {
+        while (j < len) {
+          const c = css.charCodeAt(j);
+          if (c === 92) {
+            j += 2;
+            continue;
+          }
+          if (c === 41) {
+            j += 1;
+            break;
+          }
+          j += 1;
+        }
+        out += "url()";
+        i = j;
+        continue;
+      }
+    }
+    out += css[i];
+    i += 1;
+  }
+  return out;
+}
+function findViewportHeightUnit(html) {
+  if (typeof html !== "string" || html === "") return null;
+  for (const part of extractHtmlCss(html)) {
+    const match = VIEWPORT_HEIGHT_UNIT.exec(stripCssNoise(part.css));
+    if (match !== null) return match[0];
+  }
+  return null;
+}
+function findPercentHeightDecl(declarations) {
+  for (const decl of declarations.split(";")) {
+    const colon = decl.indexOf(":");
+    if (colon === -1) continue;
+    const prop = asciiLower(decl.slice(0, colon).trim());
+    if (prop !== "height" && prop !== "min-height") continue;
+    const val = decl.slice(colon + 1).replace(/!\s*important\s*$/i, "").trim();
+    if (ROOT_PERCENT_VALUE.test(val)) return `${prop}: ${val}`;
+  }
+  return null;
+}
+function matchDelimiters(text) {
+  const close = new Int32Array(text.length);
+  close.fill(-1);
+  const parens = [];
+  const brackets = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text.charCodeAt(i);
+    if (ch === 40) parens.push(i);
+    else if (ch === 41 && parens.length > 0) close[parens.pop()] = i;
+    else if (ch === 91) brackets.push(i);
+    else if (ch === 93 && brackets.length > 0) close[brackets.pop()] = i;
+  }
+  return close;
+}
+function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
+  const len = selectorList.length;
+  if (len === 0) return false;
+  const close = matchDelimiters(selectorList);
+  const stack = [[0, len]];
+  const scanCompound = (start, end) => {
+    while (start < end && isAsciiSpace(selectorList.charCodeAt(start))) start += 1;
+    while (end > start && isAsciiSpace(selectorList.charCodeAt(end - 1))) end -= 1;
+    if (start >= end) return false;
+    let i = start;
+    let hitsRoot = false;
+    let nested = null;
+    while (i < end) {
+      const ch = selectorList.charCodeAt(i);
+      if (ch === 91) {
+        const endBracket = close[i];
+        i = endBracket === -1 || endBracket >= end ? end : endBracket + 1;
+        continue;
+      }
+      if (ch === 46 || ch === 35) {
+        i += 1;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        continue;
+      }
+      if (ch === 38) {
+        if (parentTargetsRoot) hitsRoot = true;
+        i += 1;
+        continue;
+      }
+      if (ch === 42) {
+        i += 1;
+        continue;
+      }
+      if (ch === 58) {
+        const doubleColon = i + 1 < end && selectorList.charCodeAt(i + 1) === 58;
+        i += doubleColon ? 2 : 1;
+        const nameStart = i;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        const name = asciiLower(selectorList.slice(nameStart, i));
+        if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false;
+        if (i < end && selectorList.charCodeAt(i) === 40) {
+          const endParen = close[i];
+          const argStart = i + 1;
+          const argEnd = endParen === -1 || endParen >= end ? end : endParen;
+          if (name === "is" || name === "where") {
+            nested ??= [];
+            nested.push([argStart, argEnd]);
+          }
+          i = endParen === -1 || endParen >= end ? end : endParen + 1;
+        } else if (name === "root") {
+          hitsRoot = true;
+        }
+        continue;
+      }
+      if (isIdentChar(ch)) {
+        const identStart = i;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        if (identStart === start) {
+          const name = asciiLower(selectorList.slice(identStart, i));
+          if (name === "html" || name === "body") hitsRoot = true;
+        }
+        continue;
+      }
+      i += 1;
+    }
+    if (hitsRoot) return true;
+    if (nested !== null) {
+      for (const span of nested) stack.push(span);
+    }
+    return false;
+  };
+  while (stack.length > 0) {
+    const [rangeStart, rangeEnd] = stack.pop();
+    let subStart = rangeStart;
+    let sawCombinator = false;
+    let hasToken = false;
+    let i = rangeStart;
+    while (i < rangeEnd) {
+      const ch = selectorList.charCodeAt(i);
+      if (ch === 44) {
+        if (hasToken && scanCompound(subStart, i)) return true;
+        subStart = i + 1;
+        sawCombinator = false;
+        hasToken = false;
+        i += 1;
+        continue;
+      }
+      if (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126) {
+        if (hasToken) sawCombinator = true;
+        i += 1;
+        continue;
+      }
+      if (!hasToken || sawCombinator) {
+        subStart = i;
+        sawCombinator = false;
+        hasToken = true;
+      }
+      if (ch === 40 || ch === 91) {
+        const endDelim = close[i];
+        i = endDelim === -1 || endDelim >= rangeEnd ? rangeEnd : endDelim + 1;
+        continue;
+      }
+      i += 1;
+    }
+    if (hasToken && scanCompound(subStart, rangeEnd)) return true;
+  }
+  return false;
+}
+function findRootPercentInStyleBlock(cleanCss) {
+  const stack = [];
+  let buf = "";
+  for (let i = 0; i < cleanCss.length; i += 1) {
+    const ch = cleanCss[i];
+    const top = stack.at(-1);
+    if (ch === "{") {
+      const prelude = buf.trim();
+      buf = "";
+      if (top?.kind === "skip") stack.push({ kind: "skip", targetsRoot: false });
+      else if (prelude.startsWith("@")) {
+        const skip = SKIP_AT_RULE.test(prelude);
+        stack.push({ kind: skip ? "skip" : "at", targetsRoot: skip ? false : top?.targetsRoot === true });
+      } else {
+        const inRule = top?.kind === "rule" || top?.kind === "at" && top.targetsRoot === true;
+        const targetsRoot = inRule ? selectorTargetsRoot(prelude, { parentTargetsRoot: top?.targetsRoot === true }) : selectorTargetsRoot(prelude);
+        stack.push({ kind: "rule", targetsRoot });
+      }
+    } else if (ch === ";") {
+      if (top?.targetsRoot) {
+        const hit = findPercentHeightDecl(buf);
+        if (hit !== null) return hit;
+      }
+      buf = "";
+    } else if (ch === "}") {
+      if (top?.targetsRoot) {
+        const hit = findPercentHeightDecl(buf);
+        if (hit !== null) return hit;
+      }
+      if (stack.length > 0) stack.pop();
+      buf = "";
+    } else {
+      buf += ch;
+    }
+  }
+  return null;
+}
+function findRootPercentHeight(html) {
+  if (typeof html !== "string" || html === "") return null;
+  for (const part of extractHtmlCss(html)) {
+    const clean = stripCssNoise(part.css);
+    const hit = part.isStyleBlock ? findRootPercentInStyleBlock(clean) : part.isRootElement ? findPercentHeightDecl(clean) : null;
+    if (hit !== null) return hit;
+  }
+  return null;
+}
+function checkHtml(node, path, ctx) {
   if (typeof node.html !== "string" || node.html.trim() === "") return `${path}.html: expected a non-empty string`;
+  if (ctx?.strictHtmlSizing !== false) {
+    const vh = findViewportHeightUnit(node.html);
+    if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
+    const rootPct = findRootPercentHeight(node.html);
+    if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
+  }
   if (typeof node.summary !== "string" || node.summary.trim() === "") return `${path}.summary: expected one line that says what the view shows`;
   if (node.height !== void 0 && (!isNumber(node.height) || node.height <= 0)) return `${path}.height: expected a positive number of pixels`;
   return void 0;
@@ -1469,6 +1832,63 @@ var FRAME_POLICY = "default-src 'none'; script-src 'unsafe-inline'; style-src 'u
 var HEIGHT = "dv-view-height";
 var THEME = "dv-view-theme";
 var MIN_HEIGHT = 24;
+var MAX_FIT_HEIGHT = 2e4;
+var PAGE_ACTIVATION_MS = 5e3;
+var POPOVER_SUPPORTED = typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
+var supportsPopover = () => typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
+var clampHeight = (value) => Math.min(MAX_FIT_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(value)));
+var HOST_INPUT_EVENTS = ["pointerdown", "pointerup", "touchend", "keydown"];
+var lastHostInputAt = -Infinity;
+var hostInputRefCount = 0;
+var hostInputListener = null;
+var nowMs = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+function recordHostInput(now = nowMs()) {
+  if (!Number.isFinite(now)) return;
+  lastHostInputAt = now;
+}
+function resetHostInputForTest() {
+  lastHostInputAt = -Infinity;
+}
+function acquireHostInputTracking() {
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return () => {
+  };
+  if (hostInputRefCount === 0) {
+    hostInputListener = () => recordHostInput();
+    for (const type of HOST_INPUT_EVENTS) window.addEventListener(type, hostInputListener, { capture: true, passive: true });
+  }
+  hostInputRefCount += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    hostInputRefCount = Math.max(0, hostInputRefCount - 1);
+    if (hostInputRefCount === 0 && hostInputListener !== null) {
+      for (const type of HOST_INPUT_EVENTS) window.removeEventListener(type, hostInputListener, { capture: true });
+      hostInputListener = null;
+    }
+  };
+}
+function canIframeRequestFullscreen(iframeEl, now = nowMs()) {
+  if (!iframeEl || !Number.isFinite(now) || typeof document === "undefined" || typeof navigator === "undefined") return false;
+  if (document.activeElement !== iframeEl) return false;
+  if (navigator.userActivation?.isActive !== true) return false;
+  return now - lastHostInputAt >= PAGE_ACTIVATION_MS;
+}
+function detectColorScheme() {
+  if (typeof document === "undefined") return "light";
+  const read = (element) => {
+    if (!element || typeof getComputedStyle !== "function") return "";
+    const raw = getComputedStyle(element).getPropertyValue("color-scheme").trim().toLowerCase();
+    return raw === "dark" || raw === "light" ? raw : "";
+  };
+  const explicit = read(document.body) || read(document.documentElement);
+  if (explicit !== "") return explicit;
+  const root = document.documentElement;
+  const dark = Boolean(
+    document.body?.hasAttribute("data-ds-dark-theme") || root?.classList?.contains("dark") || root?.getAttribute("data-theme") === "dark"
+  );
+  return dark ? "dark" : "light";
+}
 function themeVars() {
   if (typeof getComputedStyle !== "function" || typeof document === "undefined" || !document.body) return {};
   const style = getComputedStyle(document.body);
@@ -1479,55 +1899,229 @@ function themeVars() {
     vars[view] = value;
     vars[legacy] = value;
   }
-  vars["color-scheme"] = style.getPropertyValue("color-scheme").trim() || "normal";
+  vars["color-scheme"] = detectColorScheme();
   return vars;
 }
 var cssValue = (value) => String(value).replace(/[<>{};]/g, "");
 function frameDocument(html, vars = {}) {
-  const root = Object.entries(vars).map(([name, value]) => `${name}:${cssValue(value)}`).join(";");
-  const report = `(()=>{const send=()=>parent.postMessage({type:${JSON.stringify(HEIGHT)},height:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');new ResizeObserver(send).observe(document.documentElement);addEventListener('load',send);addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;for(const[k,v]of Object.entries(e.data.vars||{}))document.documentElement.style.setProperty(k,String(v))})})()`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style>:root{${root}}html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style><script>${report}<\/script></head><body>${html}</body></html>`;
+  const rawScheme = String(vars["color-scheme"] ?? "").trim().toLowerCase();
+  const scheme = rawScheme === "dark" || rawScheme === "light" ? rawScheme : "light";
+  const custom = Object.entries(vars).filter(([name]) => name !== "color-scheme").map(([name, value]) => `${name}:${cssValue(value)}`);
+  const root = [...custom, `color-scheme:${cssValue(scheme)}`].join(";");
+  const report = `(()=>{let raf=0;const emit=()=>{raf=0;parent.postMessage({type:${JSON.stringify(HEIGHT)},height:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*')};const schedule=()=>{if(!raf)raf=typeof requestAnimationFrame==='function'?requestAnimationFrame(emit):(emit(),0)};new ResizeObserver(schedule).observe(document.documentElement);addEventListener('load',emit);addEventListener('pagehide',()=>{if(raf&&typeof cancelAnimationFrame==='function'){cancelAnimationFrame(raf);raf=0}});addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;const r=document.getElementById('dv-theme')?.sheet?.cssRules?.[0];if(!r)return;for(const[k,v]of Object.entries(e.data.vars||{}))r.style.setProperty(k,String(v))})})()`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style id="dv-theme">:root{${root}}</style><style>html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style><script>${report}<\/script></head><body>${html}</body></html>`;
 }
 function HtmlFrame({ node }) {
   const ui = useViewUi();
   const frame = (0, import_react3.useRef)(null);
+  const boxRef = (0, import_react3.useRef)(null);
+  const expandBtnRef = (0, import_react3.useRef)(null);
+  const closeBtnRef = (0, import_react3.useRef)(null);
+  const restoreFocusRef = (0, import_react3.useRef)(false);
+  const rethemeRef = (0, import_react3.useRef)(null);
   const loads = (0, import_react3.useRef)(0);
-  const [height, setHeight] = (0, import_react3.useState)(Number.isFinite(node.height) ? node.height : 120);
+  const fullscreenRef = (0, import_react3.useRef)(false);
+  const [height, setHeight] = (0, import_react3.useState)(() => clampHeight(Number.isFinite(node.height) ? node.height : 120));
+  const [scheme, setScheme] = (0, import_react3.useState)(() => themeVars()["color-scheme"] || "light");
+  const [fullscreen, setFullscreen] = (0, import_react3.useState)(false);
+  const [fallbackFull, setFallbackFull] = (0, import_react3.useState)(false);
   const [stopped, setStopped] = (0, import_react3.useState)(false);
+  const popover = supportsPopover();
   const doc = (0, import_react3.useMemo)(() => frameDocument(String(node.html ?? ""), themeVars()), [node.html]);
+  const isPopoverOpen = () => {
+    try {
+      return Boolean(popover && boxRef.current?.matches?.(":popover-open"));
+    } catch {
+      return false;
+    }
+  };
   (0, import_react3.useEffect)(() => {
+    const releaseHostInput = acquireHostInputTracking();
     const onMessage = (event) => {
       if (event.source !== frame.current?.contentWindow || event.data?.type !== HEIGHT) return;
+      if (fullscreenRef.current || isPopoverOpen()) return;
       const next = Number(event.data.height);
-      if (Number.isFinite(next)) setHeight(Math.max(MIN_HEIGHT, Math.ceil(next)));
+      if (Number.isFinite(next)) setHeight(clampHeight(next));
     };
     window.addEventListener("message", onMessage);
-    const retheme = () => frame.current?.contentWindow?.postMessage({ type: THEME, vars: themeVars() }, "*");
+    const retheme = () => {
+      const vars = themeVars();
+      if (vars["color-scheme"]) setScheme(vars["color-scheme"]);
+      frame.current?.contentWindow?.postMessage({ type: THEME, vars }, "*");
+    };
+    rethemeRef.current = retheme;
     const observer = typeof MutationObserver === "function" ? new MutationObserver(retheme) : null;
-    observer?.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme", "style", "class"] });
+    if (observer) {
+      if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme", "style", "class"] });
+      if (document.documentElement) observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    }
     return () => {
+      rethemeRef.current = null;
       window.removeEventListener("message", onMessage);
       observer?.disconnect();
+      releaseHostInput();
     };
-  }, []);
-  if (stopped) return (0, import_react3.createElement)("p", { className: "dv-view-frame-stopped" }, ui.t("This view tried to open a page and was stopped."));
-  return (0, import_react3.createElement)("iframe", {
-    ref: frame,
-    className: "dv-view-frame",
-    title: String(node.summary ?? ""),
-    sandbox: "allow-scripts",
-    srcDoc: doc,
-    referrerPolicy: "no-referrer",
-    style: { height: `${height}px` },
-    onLoad: () => {
-      loads.current += 1;
-      if (loads.current > 1) setStopped(true);
+  }, [popover]);
+  (0, import_react3.useEffect)(() => {
+    const box = boxRef.current;
+    if (!popover || !box || stopped) return void 0;
+    const onToggle = (event) => {
+      const open = event.newState === "open";
+      if (!open && fullscreenRef.current) restoreFocusRef.current = true;
+      fullscreenRef.current = open;
+      setFullscreen(open);
+      if (!open) setFallbackFull(false);
+    };
+    box.addEventListener("toggle", onToggle);
+    return () => box.removeEventListener("toggle", onToggle);
+  }, [popover, stopped]);
+  (0, import_react3.useEffect)(() => {
+    if (!fallbackFull || stopped) return void 0;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        restoreFocusRef.current = true;
+        fullscreenRef.current = false;
+        setFallbackFull(false);
+        setFullscreen(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [fallbackFull, stopped]);
+  (0, import_react3.useEffect)(() => {
+    if (fullscreen) {
+      closeBtnRef.current?.focus?.({ preventScroll: true });
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement || boxRef.current?.contains(active)) {
+        expandBtnRef.current?.focus?.();
+      }
     }
-  });
+  }, [fullscreen]);
+  const enterFullscreen = () => {
+    const box = boxRef.current;
+    if (box && isPopoverOpen()) return;
+    fullscreenRef.current = true;
+    if (popover && typeof box?.showPopover === "function") {
+      try {
+        box.showPopover();
+        return;
+      } catch {
+      }
+    }
+    setFallbackFull(true);
+    setFullscreen(true);
+  };
+  const exitFullscreen = () => {
+    restoreFocusRef.current = true;
+    const box = boxRef.current;
+    if (popover && typeof box?.hidePopover === "function") {
+      try {
+        if (box.matches?.(":popover-open")) {
+          box.hidePopover();
+          return;
+        }
+      } catch {
+      }
+    }
+    fullscreenRef.current = false;
+    setFallbackFull(false);
+    setFullscreen(false);
+  };
+  if (stopped) return (0, import_react3.createElement)("p", { className: "dv-view-frame-stopped" }, ui.t("This view tried to open a page and was stopped."));
+  const summary = String(node.summary ?? "").trim();
+  const label = summary || ui.t("View");
+  const boxClass = fallbackFull ? "dv-view-frame-box dv-view-frame-box--fallback" : "dv-view-frame-box";
+  return (0, import_react3.createElement)(
+    "div",
+    { className: "dv-view-frame-slot", style: { height: `${height}px` } },
+    (0, import_react3.createElement)(
+      "div",
+      {
+        ref: boxRef,
+        popover: popover && !fallbackFull ? "auto" : void 0,
+        role: fullscreen ? "dialog" : void 0,
+        "aria-modal": fullscreen ? "true" : void 0,
+        "aria-label": fullscreen ? label : void 0,
+        "data-dv-fullscreen": fullscreen ? "" : void 0,
+        className: boxClass
+      },
+      (0, import_react3.createElement)(
+        "div",
+        { className: fullscreen ? "dv-view-frame-bar" : "dv-view-frame-actions" },
+        fullscreen ? [
+          (0, import_react3.createElement)("span", { key: "title", className: "dv-view-frame-title" }, label),
+          (0, import_react3.createElement)("button", {
+            key: "close",
+            ref: closeBtnRef,
+            type: "button",
+            className: "dv-view-frame-btn",
+            "aria-label": ui.t("Exit fullscreen"),
+            title: ui.t("Exit fullscreen"),
+            onClick: exitFullscreen
+          }, (0, import_react3.createElement)(CloseIcon))
+        ] : (0, import_react3.createElement)("button", {
+          ref: expandBtnRef,
+          type: "button",
+          className: "dv-view-frame-btn dv-view-frame-expand",
+          "aria-label": ui.t("Fullscreen"),
+          title: ui.t("Fullscreen"),
+          onClick: enterFullscreen
+        }, (0, import_react3.createElement)(ExpandIcon))
+      ),
+      (0, import_react3.createElement)("iframe", {
+        key: "frame",
+        ref: frame,
+        className: "dv-view-frame",
+        title: summary,
+        sandbox: "allow-scripts",
+        srcDoc: doc,
+        referrerPolicy: "no-referrer",
+        style: { height: fullscreen ? void 0 : `${height}px`, colorScheme: scheme },
+        onLoad: () => {
+          loads.current += 1;
+          if (loads.current === 1) {
+            rethemeRef.current?.();
+          } else if (loads.current > 1) {
+            try {
+              if (boxRef.current?.matches?.(":popover-open")) boxRef.current.hidePopover();
+            } catch {
+            }
+            fullscreenRef.current = false;
+            setFallbackFull(false);
+            setFullscreen(false);
+            setStopped(true);
+          }
+        }
+      })
+    )
+  );
 }
 var HTML_CSS = `
+.dv-view-frame-slot{position:relative;width:100%}
+.dv-view-frame-box{position:relative;display:flex;flex-direction:column;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;inset:auto;overflow:visible}
+.dv-view-frame-box[popover]:not(:popover-open){position:relative;display:flex;flex-direction:column;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;inset:auto;overflow:visible}
+.dv-view-frame-box:popover-open{position:fixed;inset:16px;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;display:flex;flex-direction:column;border-radius:16px;border:1px solid var(--dv-line-2);background:var(--dv-card);color:var(--dv-ink);box-shadow:0 20px 50px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:9999;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
+.dv-view-frame-box.dv-view-frame-box--fallback{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;display:flex;flex-direction:column;border-radius:0;border:0;background:var(--dv-card);color:var(--dv-ink);box-shadow:0 20px 50px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:9999;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
+.dv-view-frame-box::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
+.dv-view-frame-actions{position:absolute;top:8px;right:8px;z-index:2;opacity:.72;transition:opacity .12s ease;pointer-events:none}
+.dv-view:hover .dv-view-frame-actions,.dv-view-frame-slot:hover .dv-view-frame-actions,.dv-view-frame-actions:hover,.dv-view-frame-actions:focus-within{opacity:1}
+@media (hover:none){.dv-view-frame-actions{opacity:1}}
+.dv-view-frame-bar{flex:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 12px 8px 16px;border-bottom:1px solid var(--dv-line);background:var(--dv-card);box-sizing:border-box}
+.dv-view-frame-title{flex:1 1 0;min-width:0;font-size:13px;line-height:18px;font-weight:500;color:var(--dv-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-view-frame-btn{flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:none;color:var(--dv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s ease,color .12s ease}
+.dv-view-frame-btn svg{width:15px;height:15px}
+.dv-view-frame-btn:hover{background:var(--dv-hover);color:var(--dv-ink)}
+.dv-view-frame-btn:focus-visible{outline:2px solid var(--dv-accent);outline-offset:1px}
+.dv-view-frame-actions .dv-view-frame-btn{pointer-events:auto;background:color-mix(in srgb,var(--dv-card) 86%,transparent);border:.5px solid var(--dv-line-2);backdrop-filter:blur(6px);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.dv-view-frame-actions .dv-view-frame-btn:hover{background:var(--dv-card);color:var(--dv-ink)}
 .dv-view-frame{display:block;width:100%;border:0;background:transparent}
+.dv-view-frame-box:popover-open .dv-view-frame{flex:1 1 auto;width:100%;height:100%;min-height:0}
+.dv-view-frame-box.dv-view-frame-box--fallback .dv-view-frame{flex:1 1 auto;width:100%;height:100%;min-height:0}
 .dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
+@media (prefers-reduced-motion:reduce){.dv-view-frame-actions,.dv-view-frame-btn{transition:none}}
 `;
 
 // src/react/card.js
@@ -2299,9 +2893,8 @@ body{
 --dv-ink-rose:var(--dsw-alias-state-error-primary);
 --dv-ink-yellow:var(--dsw-alias-state-warn-label,var(--dsw-alias-state-warn-primary));
 --dv-ink-cyan:var(--dsw-alias-state-success-tertiary,var(--dsw-alias-state-success-primary));
---dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary));
-color-scheme:light}
-body[data-ds-dark-theme]{color-scheme:dark}
+--dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary))}
+body[data-ds-dark-theme],html.dark body,html[data-theme=dark] body{color-scheme:dark}
 .dv-q-inline .dv-view{max-width:100%}
 `;
 var QUESTION_CSS = `
@@ -2375,6 +2968,14 @@ button.dv-q-opt:active{background:var(--dv-active)}
 var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
 // src/client/views-definition.js
+var SHOWN_PREFIX = "The view is on screen";
+function resultTextOf(message) {
+  if (typeof message?.text === "string") return message.text;
+  if (Array.isArray(message?.content)) {
+    return message.content.filter((block) => block?.type === "text").map((block) => block.text).join("");
+  }
+  return void 0;
+}
 var viewsDefinition = {
   kind: "deep-view-views",
   match(event) {
@@ -2404,7 +3005,9 @@ var viewsDefinition = {
       if (!state.calls.has(callId)) return state;
       const calls = new Map(state.calls);
       const mine = event.data?.meta?.owner === "deep-view";
-      calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true });
+      const text = resultTextOf(event.data?.message);
+      const accepted = event.data?.meta?.rejected !== true && (text === void 0 || text.startsWith(SHOWN_PREFIX));
+      calls.set(callId, { ...calls.get(callId), ok: mine && accepted && event.data.message?.isError !== true });
       return { ...state, calls };
     }
     return state;
@@ -2502,7 +3105,7 @@ var InteractiveView = ({ callId, sessionId, useConversation }) => {
   return (0, import_react5.createElement)("div", { className: "dv-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: record.title ?? "", view: record.view, onSubmit, onDismiss, busy: flying === true }));
 };
 var TailView = ({ call: call2, sessionId, useConversation }) => {
-  const shown = checkShownView(call2.args?.title, call2.args?.view);
+  const shown = checkShownView(call2.args?.title, call2.args?.view, { strictHtmlSizing: false });
   if (shown.error !== void 0) return null;
   if (!shown.interactive && call2.args?.await_reply === true) return null;
   if (shown.interactive && call2.args?.await_reply === false) return null;
@@ -2711,6 +3314,8 @@ var en = {
   "Progress": "Progress",
   "Your answer": "Your answer",
   "This view tried to open a page and was stopped.": "This view tried to open a page and was stopped.",
+  "Fullscreen": "Fullscreen",
+  "Exit fullscreen": "Exit fullscreen",
   "(skipped)": "(skipped)"
 };
 var zh = {
@@ -2737,6 +3342,8 @@ var zh = {
   "Progress": "进度",
   "Your answer": "你的回答",
   "This view tried to open a page and was stopped.": "此视图试图打开页面，已被停止。",
+  "Fullscreen": "全屏",
+  "Exit fullscreen": "退出全屏",
   "(skipped)": "（已跳过）"
 };
 var withUi = (Component) => function DeepUiView(props) {

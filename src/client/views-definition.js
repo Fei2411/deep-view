@@ -1,3 +1,13 @@
+const SHOWN_PREFIX = 'The view is on screen'
+
+function resultTextOf(message) {
+  if (typeof message?.text === 'string') return message.text
+  if (Array.isArray(message?.content)) {
+    return message.content.filter(block => block?.type === 'text').map(block => block.text).join('')
+  }
+  return undefined
+}
+
 // The conversation Definition behind the turn tail: it folds each turn's
 // successful show_view calls — callId plus the raw arguments — into the
 // `deep-view-views` turn-data value the tail renders. Refused or failed calls
@@ -28,8 +38,11 @@ export const viewsDefinition = {
       const calls = new Map(state.calls)
       // Only a result this plugin answered carries the presentationMeta marker;
       // a same-named call another plugin's scoped tool ran stays undrawn.
+      // Refused calls carry `meta.rejected === true` or a non-accepted result text.
       const mine = event.data?.meta?.owner === 'deep-view'
-      calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true })
+      const text = resultTextOf(event.data?.message)
+      const accepted = event.data?.meta?.rejected !== true && (text === undefined || text.startsWith(SHOWN_PREFIX))
+      calls.set(callId, { ...calls.get(callId), ok: mine && accepted && event.data.message?.isError !== true })
       return { ...state, calls }
     }
     return state
