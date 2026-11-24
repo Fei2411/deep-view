@@ -353,8 +353,12 @@ test('static CSS parser handles non-ASCII uppercase, RCDATA tags, unary/slash vh
   assert.equal(findViewportHeightUnit('<style>.a{font:14px/100vh sans-serif}</style>'), '100vh')
   assert.equal(findViewportHeightUnit('<style>.a{height:-50svh}</style>'), '-50svh')
 
-  // Grouped :where/:is root selectors, nested @media / &, and spaced ! important are caught.
+  // Grouped :where/:is root selectors, trailing whitespace/comments before , or ), nested @media / &, and spaced ! important are caught.
   assert.equal(findRootPercentHeight('<style>:where(html, body) { height: 100%; }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>html , .card { height: 100%; }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>:is(body ) { height: 100%; }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>:where(\n  .card,\n  body\n) { height: 100%; }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>html/* note */, div { height: 100%; }</style>'), 'height: 100%')
   assert.equal(findRootPercentHeight('<style>:is(html, .card) { min-height: 100% ! important; }</style>'), 'min-height: 100%')
   assert.equal(findRootPercentHeight('<style>body { @media screen { height: 100%; } }</style>'), 'height: 100%')
   assert.equal(findRootPercentHeight('<style>body { &:hover { height: 100%; } }</style>'), 'height: 100%')
@@ -571,6 +575,24 @@ test('HTML_CSS keeps fallback rules separate from :popover-open and HtmlFrame ha
     })
     assert.equal(frameBox.getAttribute('role'), null)
     assert.equal(document.activeElement, box.querySelector('button.dv-view-frame-expand'), 'native Escape/light-dismiss must restore focus to expand button')
+
+    // Light-dismiss when user focused an external control must keep focus on that external control.
+    const outsideInput = document.createElement('input')
+    document.body.appendChild(outsideInput)
+    try {
+      await act(async () => { box.querySelector('button.dv-view-frame-expand').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+      await act(async () => { pendingToggle?.() })
+      outsideInput.focus()
+      popoverOpen = false
+      await act(async () => {
+        const ev = new Event('toggle')
+        ev.newState = 'closed'
+        frameBox.dispatchEvent(ev)
+      })
+      assert.equal(document.activeElement, outsideInput, 'light-dismiss must not steal focus from an external focused control')
+    } finally {
+      outsideInput.remove()
+    }
 
     // If showPopover() throws on a popover-capable browser, fallback removes popover attr so box stays visible.
     shouldThrow = true

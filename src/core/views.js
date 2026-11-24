@@ -564,28 +564,38 @@ function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
 
   while (stack.length > 0) {
     const [rangeStart, rangeEnd] = stack.pop()
-    let selStart = rangeStart
-    let lastCombinator = rangeStart - 1
+    let subStart = rangeStart
+    let sawCombinator = false
+    let hasToken = false
     let i = rangeStart
     while (i < rangeEnd) {
       const ch = selectorList.charCodeAt(i)
+      if (ch === 44) { // top-level comma
+        if (hasToken && scanCompound(subStart, i)) return true
+        subStart = i + 1
+        sawCombinator = false
+        hasToken = false
+        i += 1
+        continue
+      }
+      if (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126) {
+        if (hasToken) sawCombinator = true
+        i += 1
+        continue
+      }
+      if (!hasToken || sawCombinator) {
+        subStart = i
+        sawCombinator = false
+        hasToken = true
+      }
       if (ch === 40 || ch === 91) {
         const endDelim = close[i]
         i = endDelim === -1 || endDelim >= rangeEnd ? rangeEnd : endDelim + 1
         continue
       }
-      if (ch === 44) { // top-level comma
-        const subStart = lastCombinator >= selStart ? lastCombinator + 1 : selStart
-        if (scanCompound(subStart, i)) return true
-        selStart = i + 1
-        lastCombinator = i
-      } else if (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126) {
-        lastCombinator = i
-      }
       i += 1
     }
-    const subStart = lastCombinator >= selStart ? lastCombinator + 1 : selStart
-    if (scanCompound(subStart, rangeEnd)) return true
+    if (hasToken && scanCompound(subStart, rangeEnd)) return true
   }
   return false
 }
