@@ -132,10 +132,11 @@ export function frameDocument(html, vars = {}) {
     + 'const schedule=()=>{if(!raf)raf=typeof requestAnimationFrame===\'function\'?requestAnimationFrame(emit):(emit(),0)};'
     + 'new ResizeObserver(schedule).observe(document.documentElement);addEventListener(\'load\',emit);'
     + 'addEventListener(\'pagehide\',()=>{if(raf&&typeof cancelAnimationFrame===\'function\'){cancelAnimationFrame(raf);raf=0}});'
-    + `addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;for(const[k,v]of Object.entries(e.data.vars||{}))document.documentElement.style.setProperty(k,String(v))})})()`
+    + `addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;const r=document.getElementById('dv-theme')?.sheet?.cssRules?.[0];if(!r)return;for(const[k,v]of Object.entries(e.data.vars||{}))r.style.setProperty(k,String(v))})})()`
   return '<!doctype html><html><head><meta charset="utf-8">'
     + `<meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}">`
-    + `<style>:root{${root}}html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style>`
+    + `<style id="dv-theme">:root{${root}}</style>`
+    + '<style>html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style>'
     + `<script>${report}</script></head><body>${html}</body></html>`
 }
 
@@ -223,12 +224,16 @@ export function HtmlFrame({ node }) {
       closeBtnRef.current?.focus?.({ preventScroll: true })
     } else if (restoreFocusRef.current) {
       restoreFocusRef.current = false
-      expandBtnRef.current?.focus?.()
+      const active = document.activeElement
+      if (!active || active === document.body || active === document.documentElement || boxRef.current?.contains(active)) {
+        expandBtnRef.current?.focus?.()
+      }
     }
   }, [fullscreen])
 
   const enterFullscreen = () => {
     const box = boxRef.current
+    if (box && isPopoverOpen()) return
     fullscreenRef.current = true
     if (popover && typeof box?.showPopover === 'function') {
       try {

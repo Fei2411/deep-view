@@ -838,109 +838,115 @@ function findPercentHeightDecl(declarations) {
   }
   return null;
 }
-function splitTopLevelCommas(selectorList) {
-  const items = [];
-  let paren = 0;
-  let bracket = 0;
-  let start = 0;
-  for (let i = 0; i < selectorList.length; i += 1) {
-    const ch = selectorList.charCodeAt(i);
-    if (ch === 40) paren += 1;
-    else if (ch === 41 && paren > 0) paren -= 1;
-    else if (ch === 91) bracket += 1;
-    else if (ch === 93 && bracket > 0) bracket -= 1;
-    else if (ch === 44 && paren === 0 && bracket === 0) {
-      items.push(selectorList.slice(start, i).trim());
-      start = i + 1;
-    }
+function matchDelimiters(text) {
+  const close = new Int32Array(text.length);
+  close.fill(-1);
+  const parens = [];
+  const brackets = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text.charCodeAt(i);
+    if (ch === 40) parens.push(i);
+    else if (ch === 41 && parens.length > 0) close[parens.pop()] = i;
+    else if (ch === 91) brackets.push(i);
+    else if (ch === 93 && brackets.length > 0) close[brackets.pop()] = i;
   }
-  items.push(selectorList.slice(start).trim());
-  return items.filter(Boolean);
-}
-function extractSubjectCompound(selector) {
-  let paren = 0;
-  let bracket = 0;
-  let lastSplit = -1;
-  for (let i = 0; i < selector.length; i += 1) {
-    const ch = selector.charCodeAt(i);
-    if (ch === 40) paren += 1;
-    else if (ch === 41 && paren > 0) paren -= 1;
-    else if (ch === 91) bracket += 1;
-    else if (ch === 93 && bracket > 0) bracket -= 1;
-    else if (paren === 0 && bracket === 0 && (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126)) {
-      lastSplit = i;
-    }
-  }
-  return selector.slice(lastSplit + 1).trim();
-}
-function compoundTargetsRoot(compound, { parentTargetsRoot = false } = {}) {
-  if (compound === "") return false;
-  const len = compound.length;
-  let i = 0;
-  let hitsRoot = false;
-  while (i < len) {
-    const ch = compound.charCodeAt(i);
-    if (ch === 91) {
-      i += 1;
-      while (i < len && compound.charCodeAt(i) !== 93) i += 1;
-      if (i < len) i += 1;
-      continue;
-    }
-    if (ch === 46 || ch === 35) {
-      i += 1;
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
-      continue;
-    }
-    if (ch === 38) {
-      if (parentTargetsRoot) hitsRoot = true;
-      i += 1;
-      continue;
-    }
-    if (ch === 42) {
-      i += 1;
-      continue;
-    }
-    if (ch === 58) {
-      const doubleColon = i + 1 < len && compound.charCodeAt(i + 1) === 58;
-      i += doubleColon ? 2 : 1;
-      const nameStart = i;
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
-      const name = asciiLower(compound.slice(nameStart, i));
-      if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false;
-      if (i < len && compound.charCodeAt(i) === 40) {
-        const argStart = i + 1;
-        let depth = 1;
-        i += 1;
-        while (i < len && depth > 0) {
-          const c = compound.charCodeAt(i);
-          if (c === 40) depth += 1;
-          else if (c === 41) depth -= 1;
-          i += 1;
-        }
-        const inner = compound.slice(argStart, depth === 0 ? i - 1 : i);
-        if ((name === "is" || name === "where") && selectorTargetsRoot(inner, { parentTargetsRoot })) {
-          hitsRoot = true;
-        }
-      } else if (name === "root") {
-        hitsRoot = true;
-      }
-      continue;
-    }
-    if (isIdentChar(ch)) {
-      const start = i;
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
-      const name = asciiLower(compound.slice(start, i));
-      if (start === 0 && (name === "html" || name === "body")) hitsRoot = true;
-      continue;
-    }
-    i += 1;
-  }
-  return hitsRoot;
+  return close;
 }
 function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
-  for (const sel of splitTopLevelCommas(selectorList)) {
-    const subject = extractSubjectCompound(sel);
-    if (compoundTargetsRoot(subject, { parentTargetsRoot })) return true;
+  const len = selectorList.length;
+  if (len === 0) return false;
+  const close = matchDelimiters(selectorList);
+  const stack = [[0, len]];
+  const scanCompound = (start, end) => {
+    while (start < end && isAsciiSpace(selectorList.charCodeAt(start))) start += 1;
+    while (end > start && isAsciiSpace(selectorList.charCodeAt(end - 1))) end -= 1;
+    if (start >= end) return false;
+    let i = start;
+    let hitsRoot = false;
+    let nested = null;
+    while (i < end) {
+      const ch = selectorList.charCodeAt(i);
+      if (ch === 91) {
+        const endBracket = close[i];
+        i = endBracket === -1 || endBracket >= end ? end : endBracket + 1;
+        continue;
+      }
+      if (ch === 46 || ch === 35) {
+        i += 1;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        continue;
+      }
+      if (ch === 38) {
+        if (parentTargetsRoot) hitsRoot = true;
+        i += 1;
+        continue;
+      }
+      if (ch === 42) {
+        i += 1;
+        continue;
+      }
+      if (ch === 58) {
+        const doubleColon = i + 1 < end && selectorList.charCodeAt(i + 1) === 58;
+        i += doubleColon ? 2 : 1;
+        const nameStart = i;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        const name = asciiLower(selectorList.slice(nameStart, i));
+        if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false;
+        if (i < end && selectorList.charCodeAt(i) === 40) {
+          const endParen = close[i];
+          const argStart = i + 1;
+          const argEnd = endParen === -1 || endParen >= end ? end : endParen;
+          if (name === "is" || name === "where") {
+            nested ??= [];
+            nested.push([argStart, argEnd]);
+          }
+          i = endParen === -1 || endParen >= end ? end : endParen + 1;
+        } else if (name === "root") {
+          hitsRoot = true;
+        }
+        continue;
+      }
+      if (isIdentChar(ch)) {
+        const identStart = i;
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1;
+        if (identStart === start) {
+          const name = asciiLower(selectorList.slice(identStart, i));
+          if (name === "html" || name === "body") hitsRoot = true;
+        }
+        continue;
+      }
+      i += 1;
+    }
+    if (hitsRoot) return true;
+    if (nested !== null) {
+      for (const span of nested) stack.push(span);
+    }
+    return false;
+  };
+  while (stack.length > 0) {
+    const [rangeStart, rangeEnd] = stack.pop();
+    let selStart = rangeStart;
+    let lastCombinator = rangeStart - 1;
+    let i = rangeStart;
+    while (i < rangeEnd) {
+      const ch = selectorList.charCodeAt(i);
+      if (ch === 40 || ch === 91) {
+        const endDelim = close[i];
+        i = endDelim === -1 || endDelim >= rangeEnd ? rangeEnd : endDelim + 1;
+        continue;
+      }
+      if (ch === 44) {
+        const subStart2 = lastCombinator >= selStart ? lastCombinator + 1 : selStart;
+        if (scanCompound(subStart2, i)) return true;
+        selStart = i + 1;
+        lastCombinator = i;
+      } else if (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126) {
+        lastCombinator = i;
+      }
+      i += 1;
+    }
+    const subStart = lastCombinator >= selStart ? lastCombinator + 1 : selStart;
+    if (scanCompound(subStart, rangeEnd)) return true;
   }
   return false;
 }
@@ -1892,8 +1898,8 @@ function frameDocument(html, vars = {}) {
   const scheme = rawScheme === "dark" || rawScheme === "light" ? rawScheme : "light";
   const custom = Object.entries(vars).filter(([name]) => name !== "color-scheme").map(([name, value]) => `${name}:${cssValue(value)}`);
   const root = [...custom, `color-scheme:${cssValue(scheme)}`].join(";");
-  const report = `(()=>{let raf=0;const emit=()=>{raf=0;parent.postMessage({type:${JSON.stringify(HEIGHT)},height:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*')};const schedule=()=>{if(!raf)raf=typeof requestAnimationFrame==='function'?requestAnimationFrame(emit):(emit(),0)};new ResizeObserver(schedule).observe(document.documentElement);addEventListener('load',emit);addEventListener('pagehide',()=>{if(raf&&typeof cancelAnimationFrame==='function'){cancelAnimationFrame(raf);raf=0}});addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;for(const[k,v]of Object.entries(e.data.vars||{}))document.documentElement.style.setProperty(k,String(v))})})()`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style>:root{${root}}html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style><script>${report}<\/script></head><body>${html}</body></html>`;
+  const report = `(()=>{let raf=0;const emit=()=>{raf=0;parent.postMessage({type:${JSON.stringify(HEIGHT)},height:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*')};const schedule=()=>{if(!raf)raf=typeof requestAnimationFrame==='function'?requestAnimationFrame(emit):(emit(),0)};new ResizeObserver(schedule).observe(document.documentElement);addEventListener('load',emit);addEventListener('pagehide',()=>{if(raf&&typeof cancelAnimationFrame==='function'){cancelAnimationFrame(raf);raf=0}});addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!==${JSON.stringify(THEME)})return;const r=document.getElementById('dv-theme')?.sheet?.cssRules?.[0];if(!r)return;for(const[k,v]of Object.entries(e.data.vars||{}))r.style.setProperty(k,String(v))})})()`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style id="dv-theme">:root{${root}}</style><style>html,body{margin:0;padding:0;background:transparent;color:var(--view-ink,var(--bt-ink));font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}*{box-sizing:border-box}</style><script>${report}<\/script></head><body>${html}</body></html>`;
 }
 function HtmlFrame({ node }) {
   const ui = useViewUi();
@@ -1978,11 +1984,15 @@ function HtmlFrame({ node }) {
       closeBtnRef.current?.focus?.({ preventScroll: true });
     } else if (restoreFocusRef.current) {
       restoreFocusRef.current = false;
-      expandBtnRef.current?.focus?.();
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement || boxRef.current?.contains(active)) {
+        expandBtnRef.current?.focus?.();
+      }
     }
   }, [fullscreen]);
   const enterFullscreen = () => {
     const box = boxRef.current;
+    if (box && isPopoverOpen()) return;
     fullscreenRef.current = true;
     if (popover && typeof box?.showPopover === "function") {
       try {

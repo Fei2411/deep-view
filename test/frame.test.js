@@ -139,10 +139,10 @@ test('themeVars resolves dark/light fallback chain and never falls back to norma
 
   resetThemeAttrs()
   const docDark = frameDocument('<p>hi</p>', { 'color-scheme': 'dark', '--view-ink': '#fff' })
-  assert.match(docDark, /<style>:root\{[^}]*color-scheme:dark\}html,body\{margin:0;padding:0;background:transparent/)
+  assert.match(docDark, /<style id="dv-theme">:root\{[^}]*color-scheme:dark\}<\/style><style>html,body\{margin:0;padding:0;background:transparent/)
   assert.match(docDark, /requestAnimationFrame/)
   const docNormal = frameDocument('<p>hi</p>', { 'color-scheme': 'normal' })
-  assert.match(docNormal, /<style>:root\{color-scheme:light\}/)
+  assert.match(docNormal, /<style id="dv-theme">:root\{color-scheme:light\}<\/style>/)
 })
 
 test('HtmlFrame clamps reported height to [24, MAX_FIT_HEIGHT], updates colorScheme reactively without reloading srcDoc', async () => {
@@ -359,10 +359,45 @@ test('static CSS parser handles non-ASCII uppercase, RCDATA tags, unary/slash vh
   assert.equal(findRootPercentHeight('<style>body { @media screen { height: 100%; } }</style>'), 'height: 100%')
   assert.equal(findRootPercentHeight('<style>body { &:hover { height: 100%; } }</style>'), 'height: 100%')
 
-  // Qualified pseudo-elements and :not(body) must NOT be falsely rejected.
+  // Qualified pseudo-elements, :is(html)::before, and :not(body) must NOT be falsely rejected.
   assert.equal(findRootPercentHeight('<style>body.has-hero::before { height: 100%; }</style>'), null)
+  assert.equal(findRootPercentHeight('<style>:is(html, body)::before { height: 100%; }</style>'), null)
   assert.equal(findRootPercentHeight('<style>body:after { height: 100%; }</style>'), null)
   assert.equal(findRootPercentHeight('<style>:not(body) { height: 100%; }</style>'), null)
+
+  // Deeply nested :is(...) must stay strictly O(n) with zero call-stack overflow.
+  const deepNested = `<style>${':is('.repeat(20_000)}body${')'.repeat(20_000)} { height: 100%; }</style>`
+  const t0 = performance.now()
+  assert.equal(findRootPercentHeight(deepNested), 'height: 100%')
+  const elapsed = performance.now() - t0
+  assert.ok(elapsed < 500, `expected linear-time scan on 20k nested :is() (<500ms), took ${elapsed.toFixed(1)}ms`)
+})
+
+test('frameDocument theme sync updates #dv-theme stylesheet so card :root overrides stay intact', () => {
+  const doc = frameDocument('<style>:root{--view-ink:#111}</style><p>hi</p>', { 'color-scheme': 'dark', '--view-ink': '#fff', '--view-card': '#16181d' })
+  const inner = new JSDOM(doc, {
+    runScripts: 'dangerously',
+    url: 'http://localhost/',
+    beforeParse(win) { win.ResizeObserver = class { observe() {} } },
+  })
+  try {
+    const win = inner.window
+    const themeRule = win.document.getElementById('dv-theme')?.sheet?.cssRules?.[0]
+    assert.ok(themeRule, '#dv-theme stylesheet rule must exist')
+    // Simulate a dv-view-theme postMessage from parent.
+    win.dispatchEvent(new win.MessageEvent('message', {
+      source: win.parent,
+      data: { type: 'dv-view-theme', vars: { 'color-scheme': 'light', '--view-ink': '#eee', '--view-card': '#fafafa' } },
+    }))
+    // Theme updates the default stylesheet rule, NEVER documentElement inline style.
+    assert.equal(win.document.documentElement.style.getPropertyValue('--view-ink'), '', 'must not set inline style on documentElement')
+    assert.equal(themeRule.style.getPropertyValue('--view-card').trim(), '#fafafa')
+    assert.equal(themeRule.style.getPropertyValue('color-scheme').trim(), 'light')
+    // Card's later <style>:root{--view-ink:#111}</style> wins in cascade order.
+    assert.equal(win.getComputedStyle(win.document.documentElement).getPropertyValue('--view-ink').trim(), '#111')
+  } finally {
+    inner.window.close()
+  }
 })
 
 test('historical accepted 100vh HTML cards still replay in ViewsTail while newly refused calls are excluded', async (t) => {
@@ -501,8 +536,13 @@ test('HTML_CSS keeps fallback rules separate from :popover-open and HtmlFrame ha
     const frameBox = box.querySelector('.dv-view-frame-box')
     const iframe = box.querySelector('iframe.dv-view-frame')
 
-    // Click fullscreen: showPopover() runs synchronously, toggle fires asynchronously later.
-    await act(async () => { box.querySelector('button.dv-view-frame-expand').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    // Click fullscreen twice rapidly before async toggle fires: second click must NOT throw into fallback.
+    await act(async () => {
+      const btn = box.querySelector('button.dv-view-frame-expand')
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    assert.equal(frameBox.classList.contains('dv-view-frame-box--fallback'), false)
     // Resize arriving BEFORE async toggle must NOT clobber the locked inline height (210px).
     await act(async () => {
       window.dispatchEvent(new MessageEvent('message', {

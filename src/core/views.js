@@ -473,112 +473,119 @@ function findPercentHeightDecl(declarations) {
   return null
 }
 
-function splitTopLevelCommas(selectorList) {
-  const items = []
-  let paren = 0
-  let bracket = 0
-  let start = 0
-  for (let i = 0; i < selectorList.length; i += 1) {
-    const ch = selectorList.charCodeAt(i)
-    if (ch === 40) paren += 1
-    else if (ch === 41 && paren > 0) paren -= 1
-    else if (ch === 91) bracket += 1
-    else if (ch === 93 && bracket > 0) bracket -= 1
-    else if (ch === 44 && paren === 0 && bracket === 0) {
-      items.push(selectorList.slice(start, i).trim())
-      start = i + 1
-    }
+// Single-pass O(n) bracket/paren matcher so nested :is()/:where() scans are strictly O(n).
+function matchDelimiters(text) {
+  const close = new Int32Array(text.length)
+  close.fill(-1)
+  const parens = []
+  const brackets = []
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text.charCodeAt(i)
+    if (ch === 40) parens.push(i)
+    else if (ch === 41 && parens.length > 0) close[parens.pop()] = i
+    else if (ch === 91) brackets.push(i)
+    else if (ch === 93 && brackets.length > 0) close[brackets.pop()] = i
   }
-  items.push(selectorList.slice(start).trim())
-  return items.filter(Boolean)
-}
-
-function extractSubjectCompound(selector) {
-  let paren = 0
-  let bracket = 0
-  let lastSplit = -1
-  for (let i = 0; i < selector.length; i += 1) {
-    const ch = selector.charCodeAt(i)
-    if (ch === 40) paren += 1
-    else if (ch === 41 && paren > 0) paren -= 1
-    else if (ch === 91) bracket += 1
-    else if (ch === 93 && bracket > 0) bracket -= 1
-    else if (paren === 0 && bracket === 0 && (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126)) {
-      lastSplit = i
-    }
-  }
-  return selector.slice(lastSplit + 1).trim()
-}
-
-function compoundTargetsRoot(compound, { parentTargetsRoot = false } = {}) {
-  if (compound === '') return false
-  const len = compound.length
-  let i = 0
-  let hitsRoot = false
-  while (i < len) {
-    const ch = compound.charCodeAt(i)
-    if (ch === 91) { // [...] attribute selector
-      i += 1
-      while (i < len && compound.charCodeAt(i) !== 93) i += 1
-      if (i < len) i += 1
-      continue
-    }
-    if (ch === 46 || ch === 35) { // .class or #id
-      i += 1
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
-      continue
-    }
-    if (ch === 38) { // & nesting selector
-      if (parentTargetsRoot) hitsRoot = true
-      i += 1
-      continue
-    }
-    if (ch === 42) { // * universal selector
-      i += 1
-      continue
-    }
-    if (ch === 58) { // :pseudo-class or ::pseudo-element
-      const doubleColon = i + 1 < len && compound.charCodeAt(i + 1) === 58
-      i += doubleColon ? 2 : 1
-      const nameStart = i
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
-      const name = asciiLower(compound.slice(nameStart, i))
-      if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false
-      if (i < len && compound.charCodeAt(i) === 40) {
-        const argStart = i + 1
-        let depth = 1
-        i += 1
-        while (i < len && depth > 0) {
-          const c = compound.charCodeAt(i)
-          if (c === 40) depth += 1
-          else if (c === 41) depth -= 1
-          i += 1
-        }
-        const inner = compound.slice(argStart, depth === 0 ? i - 1 : i)
-        if ((name === 'is' || name === 'where') && selectorTargetsRoot(inner, { parentTargetsRoot })) {
-          hitsRoot = true
-        }
-      } else if (name === 'root') {
-        hitsRoot = true
-      }
-      continue
-    }
-    if (isIdentChar(ch)) {
-      const start = i
-      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
-      const name = asciiLower(compound.slice(start, i))
-      if (start === 0 && (name === 'html' || name === 'body')) hitsRoot = true
-      continue
-    }
-    i += 1
-  }
-  return hitsRoot
+  return close
 }
 
 function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
-  for (const sel of splitTopLevelCommas(selectorList)) {
-    const subject = extractSubjectCompound(sel)
-    if (compoundTargetsRoot(subject, { parentTargetsRoot })) return true
+  const len = selectorList.length
+  if (len === 0) return false
+  const close = matchDelimiters(selectorList)
+  const stack = [[0, len]]
+
+  const scanCompound = (start, end) => {
+    while (start < end && isAsciiSpace(selectorList.charCodeAt(start))) start += 1
+    while (end > start && isAsciiSpace(selectorList.charCodeAt(end - 1))) end -= 1
+    if (start >= end) return false
+    let i = start
+    let hitsRoot = false
+    let nested = null
+    while (i < end) {
+      const ch = selectorList.charCodeAt(i)
+      if (ch === 91) { // [...] attribute selector
+        const endBracket = close[i]
+        i = endBracket === -1 || endBracket >= end ? end : endBracket + 1
+        continue
+      }
+      if (ch === 46 || ch === 35) { // .class or #id
+        i += 1
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1
+        continue
+      }
+      if (ch === 38) { // & nesting selector
+        if (parentTargetsRoot) hitsRoot = true
+        i += 1
+        continue
+      }
+      if (ch === 42) { // * universal selector
+        i += 1
+        continue
+      }
+      if (ch === 58) { // :pseudo-class or ::pseudo-element
+        const doubleColon = i + 1 < end && selectorList.charCodeAt(i + 1) === 58
+        i += doubleColon ? 2 : 1
+        const nameStart = i
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1
+        const name = asciiLower(selectorList.slice(nameStart, i))
+        if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false
+        if (i < end && selectorList.charCodeAt(i) === 40) {
+          const endParen = close[i]
+          const argStart = i + 1
+          const argEnd = endParen === -1 || endParen >= end ? end : endParen
+          if (name === 'is' || name === 'where') {
+            nested ??= []
+            nested.push([argStart, argEnd])
+          }
+          i = endParen === -1 || endParen >= end ? end : endParen + 1
+        } else if (name === 'root') {
+          hitsRoot = true
+        }
+        continue
+      }
+      if (isIdentChar(ch)) {
+        const identStart = i
+        while (i < end && isIdentChar(selectorList.charCodeAt(i))) i += 1
+        if (identStart === start) {
+          const name = asciiLower(selectorList.slice(identStart, i))
+          if (name === 'html' || name === 'body') hitsRoot = true
+        }
+        continue
+      }
+      i += 1
+    }
+    if (hitsRoot) return true
+    if (nested !== null) {
+      for (const span of nested) stack.push(span)
+    }
+    return false
+  }
+
+  while (stack.length > 0) {
+    const [rangeStart, rangeEnd] = stack.pop()
+    let selStart = rangeStart
+    let lastCombinator = rangeStart - 1
+    let i = rangeStart
+    while (i < rangeEnd) {
+      const ch = selectorList.charCodeAt(i)
+      if (ch === 40 || ch === 91) {
+        const endDelim = close[i]
+        i = endDelim === -1 || endDelim >= rangeEnd ? rangeEnd : endDelim + 1
+        continue
+      }
+      if (ch === 44) { // top-level comma
+        const subStart = lastCombinator >= selStart ? lastCombinator + 1 : selStart
+        if (scanCompound(subStart, i)) return true
+        selStart = i + 1
+        lastCombinator = i
+      } else if (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126) {
+        lastCombinator = i
+      }
+      i += 1
+    }
+    const subStart = lastCombinator >= selStart ? lastCombinator + 1 : selStart
+    if (scanCompound(subStart, rangeEnd)) return true
   }
   return false
 }
