@@ -295,8 +295,244 @@ function checkSources(node, path) {
   return undefined
 }
 
+const VIEWPORT_HEIGHT_UNIT = /(?<![\w.+/-])(?:-?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i
+const ROOT_PERCENT_VALUE = /^100(?:\.0+)?%$/
+const ROOT_SELECTOR_SUBJECT = /^(?:html|body|:root)(?:(?:\.|#|:[^:])[^\s>+~]*)?$/i
+const SKIP_AT_RULE = /^@(?:(?:-webkit-|-moz-)?keyframes|font-face|page)\b/i
+
+const isAsciiSpace = code => code === 32 || code === 9 || code === 10 || code === 12 || code === 13
+const isTagNameChar = code => (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 45 || code === 58
+const isIdentChar = code => (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 45 || code === 95
+
+// Linear-time HTML CSS extractor: skips HTML comments and <script> raw text,
+// collects <style> blocks and style= attributes (quoted or unquoted).
+function extractHtmlCss(html) {
+  const parts = []
+  const lower = html.toLowerCase()
+  const len = html.length
+  let i = 0
+  while (i < len) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) break
+    if (html.startsWith('<!--', lt)) {
+      const end = html.indexOf('-->', lt + 4)
+      i = end === -1 ? len : end + 3
+      continue
+    }
+    let p = lt + 1
+    if (p >= len || !isTagNameChar(html.charCodeAt(p))) {
+      i = lt + 1
+      continue
+    }
+    const nameStart = p
+    while (p < len && isTagNameChar(html.charCodeAt(p))) p += 1
+    const tag = lower.slice(nameStart, p)
+    const isRoot = tag === 'html' || tag === 'body'
+
+    let selfClosing = false
+    while (p < len) {
+      while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1
+      if (p >= len) break
+      const ch = html.charCodeAt(p)
+      if (ch === 62) { p += 1; break }
+      if (ch === 47) {
+        if (p + 1 < len && html.charCodeAt(p + 1) === 62) { selfClosing = true; p += 2; break }
+        p += 1
+        continue
+      }
+      const attrStart = p
+      while (p < len) {
+        const c = html.charCodeAt(p)
+        if (isAsciiSpace(c) || c === 61 || c === 62 || c === 47) break
+        p += 1
+      }
+      const attr = lower.slice(attrStart, p)
+      while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1
+      let value = null
+      if (p < len && html.charCodeAt(p) === 61) {
+        p += 1
+        while (p < len && isAsciiSpace(html.charCodeAt(p))) p += 1
+        if (p < len) {
+          const q = html.charCodeAt(p)
+          if (q === 34 || q === 39) {
+            const valStart = p + 1
+            const close = html.indexOf(q === 34 ? '"' : "'", valStart)
+            if (close === -1) { value = html.slice(valStart); p = len }
+            else { value = html.slice(valStart, close); p = close + 1 }
+          } else {
+            const valStart = p
+            while (p < len) {
+              const c = html.charCodeAt(p)
+              if (isAsciiSpace(c) || c === 62) break
+              p += 1
+            }
+            value = html.slice(valStart, p)
+          }
+        }
+      }
+      if (attr === 'style' && value) parts.push({ css: value, isStyleBlock: false, isRootElement: isRoot })
+    }
+
+    if ((tag === 'style' || tag === 'script') && !selfClosing) {
+      const bodyStart = p
+      const closeTag = `</${tag}`
+      let closeAt = -1
+      let search = bodyStart
+      while (search < len) {
+        const idx = lower.indexOf(closeTag, search)
+        if (idx === -1) break
+        const after = idx + closeTag.length
+        if (after >= len || isAsciiSpace(html.charCodeAt(after)) || html.charCodeAt(after) === 62 || html.charCodeAt(after) === 47) {
+          closeAt = idx
+          break
+        }
+        search = idx + 1
+      }
+      const end = closeAt === -1 ? len : closeAt
+      if (tag === 'style') parts.push({ css: html.slice(bodyStart, end), isStyleBlock: true, isRootElement: false })
+      if (closeAt === -1) i = len
+      else {
+        const closeGt = html.indexOf('>', closeAt + closeTag.length)
+        i = closeGt === -1 ? len : closeGt + 1
+      }
+      continue
+    }
+    i = p
+  }
+  return parts
+}
+
+// Strips CSS comments, quoted strings, and unquoted url(...) payloads in O(n)
+// so data URIs and content strings never trigger false positives.
+function stripCssNoise(css) {
+  const len = css.length
+  let out = ''
+  let i = 0
+  while (i < len) {
+    const ch = css.charCodeAt(i)
+    if (ch === 47 && i + 1 < len && css.charCodeAt(i + 1) === 42) { // /* ... */
+      const end = css.indexOf('*/', i + 2)
+      out += ' '
+      i = end === -1 ? len : end + 2
+      continue
+    }
+    if (ch === 34 || ch === 39) { // "..." or '...'
+      out += '""'
+      i += 1
+      while (i < len) {
+        const c = css.charCodeAt(i)
+        if (c === 92) { i += 2; continue } // backslash escape
+        if (c === ch) { i += 1; break }
+        i += 1
+      }
+      continue
+    }
+    if ((ch === 117 || ch === 85) && i + 3 < len && css.slice(i, i + 4).toLowerCase() === 'url('
+      && (i === 0 || !isIdentChar(css.charCodeAt(i - 1)))) {
+      let j = i + 4
+      while (j < len && isAsciiSpace(css.charCodeAt(j))) j += 1
+      if (j < len && css.charCodeAt(j) !== 34 && css.charCodeAt(j) !== 39) {
+        while (j < len) {
+          const c = css.charCodeAt(j)
+          if (c === 92) { j += 2; continue }
+          if (c === 41) { j += 1; break }
+          j += 1
+        }
+        out += 'url()'
+        i = j
+        continue
+      }
+    }
+    out += css[i]
+    i += 1
+  }
+  return out
+}
+
+export function findViewportHeightUnit(html) {
+  if (typeof html !== 'string' || html === '') return null
+  for (const part of extractHtmlCss(html)) {
+    const match = VIEWPORT_HEIGHT_UNIT.exec(stripCssNoise(part.css))
+    if (match !== null) return match[0]
+  }
+  return null
+}
+
+function findPercentHeightDecl(declarations) {
+  for (const decl of declarations.split(';')) {
+    const colon = decl.indexOf(':')
+    if (colon === -1) continue
+    const prop = decl.slice(0, colon).trim().toLowerCase()
+    if (prop !== 'height' && prop !== 'min-height') continue
+    const val = decl.slice(colon + 1).replace(/!important\s*$/i, '').trim()
+    if (ROOT_PERCENT_VALUE.test(val)) return `${prop}: ${val}`
+  }
+  return null
+}
+
+function selectorTargetsRoot(selectorList) {
+  for (const raw of selectorList.split(',')) {
+    const sel = raw.trim()
+    if (!sel) continue
+    const tokens = sel.replace(/\[[^\]]*\]/g, '').split(/[\s>+~]+/).filter(Boolean)
+    const subject = tokens.at(-1) ?? ''
+    if (ROOT_SELECTOR_SUBJECT.test(subject)) return true
+  }
+  return false
+}
+
+function findRootPercentInStyleBlock(cleanCss) {
+  const stack = []
+  let buf = ''
+  for (let i = 0; i < cleanCss.length; i += 1) {
+    const ch = cleanCss[i]
+    const top = stack.at(-1)
+    if (ch === '{') {
+      const prelude = buf.trim()
+      buf = ''
+      if (top?.kind === 'skip') stack.push({ kind: 'skip', targetsRoot: false })
+      else if (prelude.startsWith('@')) stack.push({ kind: SKIP_AT_RULE.test(prelude) ? 'skip' : 'at', targetsRoot: false })
+      else stack.push({ kind: 'rule', targetsRoot: top?.kind === 'rule' ? false : selectorTargetsRoot(prelude) })
+    } else if (ch === ';') {
+      if (top?.kind === 'rule' && top.targetsRoot) {
+        const hit = findPercentHeightDecl(buf)
+        if (hit !== null) return hit
+      }
+      buf = ''
+    } else if (ch === '}') {
+      if (top?.kind === 'rule' && top.targetsRoot) {
+        const hit = findPercentHeightDecl(buf)
+        if (hit !== null) return hit
+      }
+      if (stack.length > 0) stack.pop()
+      buf = ''
+    } else {
+      buf += ch
+    }
+  }
+  return null
+}
+
+export function findRootPercentHeight(html) {
+  if (typeof html !== 'string' || html === '') return null
+  for (const part of extractHtmlCss(html)) {
+    const clean = stripCssNoise(part.css)
+    const hit = part.isStyleBlock
+      ? findRootPercentInStyleBlock(clean)
+      : part.isRootElement
+        ? findPercentHeightDecl(clean)
+        : null
+    if (hit !== null) return hit
+  }
+  return null
+}
+
 function checkHtml(node, path) {
   if (typeof node.html !== 'string' || node.html.trim() === '') return `${path}.html: expected a non-empty string`
+  const vh = findViewportHeightUnit(node.html)
+  if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
+  const rootPct = findRootPercentHeight(node.html)
+  if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
   if (typeof node.summary !== 'string' || node.summary.trim() === '') return `${path}.summary: expected one line that says what the view shows`
   if (node.height !== undefined && (!isNumber(node.height) || node.height <= 0)) return `${path}.height: expected a positive number of pixels`
   return undefined

@@ -27,7 +27,7 @@ body{
 --dv-ink-cyan:var(--dsw-alias-state-success-tertiary,var(--dsw-alias-state-success-primary));
 --dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary));
 color-scheme:light}
-body[data-ds-dark-theme]{color-scheme:dark}
+body[data-ds-dark-theme],html.dark body,html[data-theme=dark] body{color-scheme:dark}
 .dv-q-inline .dv-view{max-width:100%}
 `
 
