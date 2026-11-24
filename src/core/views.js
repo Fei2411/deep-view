@@ -93,8 +93,8 @@ export function normalizeView(value, inFormFields = false) {
   return out
 }
 
-export function validateView(view) {
-  const ctx = { ids: new Set(), nodes: 0, interactive: false, inputs: new Map(), lets: new Map(), formulas: [] }
+export function validateView(view, { strictHtmlSizing = true } = {}) {
+  const ctx = { ids: new Set(), nodes: 0, interactive: false, inputs: new Map(), lets: new Map(), formulas: [], strictHtmlSizing }
   const error = checkNode(view, 'view', 1, ctx) ?? checkFormulas(ctx)
   return error === undefined ? { ok: true, interactive: ctx.interactive } : { ok: false, error }
 }
@@ -103,14 +103,14 @@ export function validateView(view) {
 // in the client. The bytes are measured as sent, before normalizeView unwraps the
 // provider's encoding, or a wrapped view could shrink under the byte limit. The
 // normalized view and the trimmed title come back; the title may be empty.
-export function checkShownView(title, sent) {
+export function checkShownView(title, sent, options = {}) {
   let bytes
   try { bytes = viewBytes(title, sent) } catch { return { error: 'The view is not JSON data.' } }
   if (bytes > VIEW_BYTE_LIMIT) return { error: `The view is ${bytes} bytes; the limit is ${VIEW_BYTE_LIMIT}.` }
   if (title !== undefined && title !== null && typeof title !== 'string') return { error: 'title: expected a string' }
   const named = String(title ?? '').trim()
   const view = normalizeView(sent)
-  const checked = validateView(view)
+  const checked = validateView(view, options)
   if (!checked.ok) return { error: checked.error }
   return { title: named, view, interactive: checked.interactive }
 }
@@ -137,7 +137,7 @@ function checkNode(node, path, depth, ctx) {
     case 'progress': return checkProgress(node, path, ctx)
     case 'callout': return checkCallout(node, path, ctx)
     case 'sources': return checkSources(node, path)
-    case 'html': return checkHtml(node, path)
+    case 'html': return checkHtml(node, path, ctx)
     case 'slider': case 'number': return checkNumberInput(node, path, ctx)
     case 'choice': return checkChoice(node, path, ctx)
     case 'toggle': return checkToggle(node, path, ctx)
@@ -295,20 +295,23 @@ function checkSources(node, path) {
   return undefined
 }
 
-const VIEWPORT_HEIGHT_UNIT = /(?<![\w.+/-])(?:-?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i
+const VIEWPORT_HEIGHT_UNIT = /(?<![\w.-])(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i
 const ROOT_PERCENT_VALUE = /^100(?:\.0+)?%$/
-const ROOT_SELECTOR_SUBJECT = /^(?:html|body|:root)(?:(?:\.|#|:[^:])[^\s>+~]*)?$/i
 const SKIP_AT_RULE = /^@(?:(?:-webkit-|-moz-)?keyframes|font-face|page)\b/i
+const LEGACY_PSEUDO_ELEMENTS = new Set(['before', 'after', 'first-line', 'first-letter'])
+const RAW_TEXT_TAGS = new Set(['style', 'script', 'textarea', 'title'])
 
 const isAsciiSpace = code => code === 32 || code === 9 || code === 10 || code === 12 || code === 13
 const isTagNameChar = code => (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 45 || code === 58
 const isIdentChar = code => (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 45 || code === 95
+// ASCII-only lowercasing preserves 1:1 UTF-16 indices (unlike String#toLowerCase on U+0130 'İ').
+const asciiLower = text => text.replace(/[A-Z]/g, ch => ch.toLowerCase())
 
-// Linear-time HTML CSS extractor: skips HTML comments and <script> raw text,
-// collects <style> blocks and style= attributes (quoted or unquoted).
+// Linear-time HTML CSS extractor: skips HTML comments and raw/RCDATA bodies
+// (<script>, <textarea>, <title>), collects <style> blocks and style= attributes.
 function extractHtmlCss(html) {
   const parts = []
-  const lower = html.toLowerCase()
+  const lower = asciiLower(html)
   const len = html.length
   let i = 0
   while (i < len) {
@@ -373,7 +376,7 @@ function extractHtmlCss(html) {
       if (attr === 'style' && value) parts.push({ css: value, isStyleBlock: false, isRootElement: isRoot })
     }
 
-    if ((tag === 'style' || tag === 'script') && !selfClosing) {
+    if (RAW_TEXT_TAGS.has(tag) && !selfClosing) {
       const bodyStart = p
       const closeTag = `</${tag}`
       let closeAt = -1
@@ -427,7 +430,7 @@ function stripCssNoise(css) {
       }
       continue
     }
-    if ((ch === 117 || ch === 85) && i + 3 < len && css.slice(i, i + 4).toLowerCase() === 'url('
+    if ((ch === 117 || ch === 85) && i + 3 < len && asciiLower(css.slice(i, i + 4)) === 'url('
       && (i === 0 || !isIdentChar(css.charCodeAt(i - 1)))) {
       let j = i + 4
       while (j < len && isAsciiSpace(css.charCodeAt(j))) j += 1
@@ -462,21 +465,120 @@ function findPercentHeightDecl(declarations) {
   for (const decl of declarations.split(';')) {
     const colon = decl.indexOf(':')
     if (colon === -1) continue
-    const prop = decl.slice(0, colon).trim().toLowerCase()
+    const prop = asciiLower(decl.slice(0, colon).trim())
     if (prop !== 'height' && prop !== 'min-height') continue
-    const val = decl.slice(colon + 1).replace(/!important\s*$/i, '').trim()
+    const val = decl.slice(colon + 1).replace(/!\s*important\s*$/i, '').trim()
     if (ROOT_PERCENT_VALUE.test(val)) return `${prop}: ${val}`
   }
   return null
 }
 
-function selectorTargetsRoot(selectorList) {
-  for (const raw of selectorList.split(',')) {
-    const sel = raw.trim()
-    if (!sel) continue
-    const tokens = sel.replace(/\[[^\]]*\]/g, '').split(/[\s>+~]+/).filter(Boolean)
-    const subject = tokens.at(-1) ?? ''
-    if (ROOT_SELECTOR_SUBJECT.test(subject)) return true
+function splitTopLevelCommas(selectorList) {
+  const items = []
+  let paren = 0
+  let bracket = 0
+  let start = 0
+  for (let i = 0; i < selectorList.length; i += 1) {
+    const ch = selectorList.charCodeAt(i)
+    if (ch === 40) paren += 1
+    else if (ch === 41 && paren > 0) paren -= 1
+    else if (ch === 91) bracket += 1
+    else if (ch === 93 && bracket > 0) bracket -= 1
+    else if (ch === 44 && paren === 0 && bracket === 0) {
+      items.push(selectorList.slice(start, i).trim())
+      start = i + 1
+    }
+  }
+  items.push(selectorList.slice(start).trim())
+  return items.filter(Boolean)
+}
+
+function extractSubjectCompound(selector) {
+  let paren = 0
+  let bracket = 0
+  let lastSplit = -1
+  for (let i = 0; i < selector.length; i += 1) {
+    const ch = selector.charCodeAt(i)
+    if (ch === 40) paren += 1
+    else if (ch === 41 && paren > 0) paren -= 1
+    else if (ch === 91) bracket += 1
+    else if (ch === 93 && bracket > 0) bracket -= 1
+    else if (paren === 0 && bracket === 0 && (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126)) {
+      lastSplit = i
+    }
+  }
+  return selector.slice(lastSplit + 1).trim()
+}
+
+function compoundTargetsRoot(compound, { parentTargetsRoot = false } = {}) {
+  if (compound === '') return false
+  const len = compound.length
+  let i = 0
+  let hitsRoot = false
+  while (i < len) {
+    const ch = compound.charCodeAt(i)
+    if (ch === 91) { // [...] attribute selector
+      i += 1
+      while (i < len && compound.charCodeAt(i) !== 93) i += 1
+      if (i < len) i += 1
+      continue
+    }
+    if (ch === 46 || ch === 35) { // .class or #id
+      i += 1
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
+      continue
+    }
+    if (ch === 38) { // & nesting selector
+      if (parentTargetsRoot) hitsRoot = true
+      i += 1
+      continue
+    }
+    if (ch === 42) { // * universal selector
+      i += 1
+      continue
+    }
+    if (ch === 58) { // :pseudo-class or ::pseudo-element
+      const doubleColon = i + 1 < len && compound.charCodeAt(i + 1) === 58
+      i += doubleColon ? 2 : 1
+      const nameStart = i
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
+      const name = asciiLower(compound.slice(nameStart, i))
+      if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false
+      if (i < len && compound.charCodeAt(i) === 40) {
+        const argStart = i + 1
+        let depth = 1
+        i += 1
+        while (i < len && depth > 0) {
+          const c = compound.charCodeAt(i)
+          if (c === 40) depth += 1
+          else if (c === 41) depth -= 1
+          i += 1
+        }
+        const inner = compound.slice(argStart, depth === 0 ? i - 1 : i)
+        if ((name === 'is' || name === 'where') && selectorTargetsRoot(inner, { parentTargetsRoot })) {
+          hitsRoot = true
+        }
+      } else if (name === 'root') {
+        hitsRoot = true
+      }
+      continue
+    }
+    if (isIdentChar(ch)) {
+      const start = i
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1
+      const name = asciiLower(compound.slice(start, i))
+      if (start === 0 && (name === 'html' || name === 'body')) hitsRoot = true
+      continue
+    }
+    i += 1
+  }
+  return hitsRoot
+}
+
+function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
+  for (const sel of splitTopLevelCommas(selectorList)) {
+    const subject = extractSubjectCompound(sel)
+    if (compoundTargetsRoot(subject, { parentTargetsRoot })) return true
   }
   return false
 }
@@ -491,16 +593,24 @@ function findRootPercentInStyleBlock(cleanCss) {
       const prelude = buf.trim()
       buf = ''
       if (top?.kind === 'skip') stack.push({ kind: 'skip', targetsRoot: false })
-      else if (prelude.startsWith('@')) stack.push({ kind: SKIP_AT_RULE.test(prelude) ? 'skip' : 'at', targetsRoot: false })
-      else stack.push({ kind: 'rule', targetsRoot: top?.kind === 'rule' ? false : selectorTargetsRoot(prelude) })
+      else if (prelude.startsWith('@')) {
+        const skip = SKIP_AT_RULE.test(prelude)
+        stack.push({ kind: skip ? 'skip' : 'at', targetsRoot: skip ? false : top?.targetsRoot === true })
+      } else {
+        const inRule = top?.kind === 'rule' || (top?.kind === 'at' && top.targetsRoot === true)
+        const targetsRoot = inRule
+          ? selectorTargetsRoot(prelude, { parentTargetsRoot: top?.targetsRoot === true })
+          : selectorTargetsRoot(prelude)
+        stack.push({ kind: 'rule', targetsRoot })
+      }
     } else if (ch === ';') {
-      if (top?.kind === 'rule' && top.targetsRoot) {
+      if (top?.targetsRoot) {
         const hit = findPercentHeightDecl(buf)
         if (hit !== null) return hit
       }
       buf = ''
     } else if (ch === '}') {
-      if (top?.kind === 'rule' && top.targetsRoot) {
+      if (top?.targetsRoot) {
         const hit = findPercentHeightDecl(buf)
         if (hit !== null) return hit
       }
@@ -527,12 +637,14 @@ export function findRootPercentHeight(html) {
   return null
 }
 
-function checkHtml(node, path) {
+function checkHtml(node, path, ctx) {
   if (typeof node.html !== 'string' || node.html.trim() === '') return `${path}.html: expected a non-empty string`
-  const vh = findViewportHeightUnit(node.html)
-  if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
-  const rootPct = findRootPercentHeight(node.html)
-  if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
+  if (ctx?.strictHtmlSizing !== false) {
+    const vh = findViewportHeightUnit(node.html)
+    if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
+    const rootPct = findRootPercentHeight(node.html)
+    if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`
+  }
   if (typeof node.summary !== 'string' || node.summary.trim() === '') return `${path}.summary: expected one line that says what the view shows`
   if (node.height !== undefined && (!isNumber(node.height) || node.height <= 0)) return `${path}.height: expected a positive number of pixels`
   return undefined

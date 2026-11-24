@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
 import { findRootPercentHeight, findViewportHeightUnit, validateView } from '../src/core/views.js'
@@ -13,8 +16,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const { createElement: h, act } = await import('react')
 const { createRoot } = await import('react-dom/client')
-const { ViewUi } = await import('../src/react/ui.js')
+const { ViewUi, useOptionKeys } = await import('../src/react/ui.js')
 const {
+  HTML_CSS,
   HtmlFrame,
   MAX_FIT_HEIGHT,
   PAGE_ACTIVATION_MS,
@@ -24,6 +28,10 @@ const {
   resetHostInputForTest,
   themeVars,
 } = await import('../src/react/frame.js')
+const { ViewsTail } = await import('../src/client/tail.js')
+const { viewsDefinition } = await import('../src/client/views-definition.js')
+const { apply } = await import('../index.js')
+const { fakeContext } = await import('./fake-ctx.js')
 
 const ui = { t: key => key, Markdown: ({ text }) => h('span', null, String(text ?? '')) }
 
@@ -313,6 +321,14 @@ test('canIframeRequestFullscreen enforces focus, userActivation, and 5s host inp
     assert.equal(canIframeRequestFullscreen(iframe, 10_000), false)
     assert.equal(canIframeRequestFullscreen(iframe, 14_999), false)
     assert.equal(canIframeRequestFullscreen(iframe, 15_000), true)
+
+    // Non-finite timestamps fail closed and never poison lastHostInputAt.
+    assert.equal(canIframeRequestFullscreen(iframe, Number.POSITIVE_INFINITY), false)
+    assert.equal(canIframeRequestFullscreen(iframe, Number.NaN), false)
+    assert.equal(canIframeRequestFullscreen(iframe, Number.NEGATIVE_INFINITY), false)
+    recordHostInput(Number.NaN)
+    recordHostInput(Number.POSITIVE_INFINITY)
+    assert.equal(canIframeRequestFullscreen(iframe, 15_000), true)
   } finally {
     if (origActive) Object.defineProperty(document, 'activeElement', origActive)
     else delete document.activeElement
@@ -320,5 +336,212 @@ test('canIframeRequestFullscreen enforces focus, userActivation, and 5s host inp
     else delete navigator.userActivation
     iframe.remove()
     resetHostInputForTest()
+  }
+})
+
+test('static CSS parser handles non-ASCII uppercase, RCDATA tags, unary/slash vh, grouped root selectors, and pseudo-elements', () => {
+  // Non-ASCII U+0130 ('İ') must not shift offsets for subsequent style= or <style>.
+  assert.equal(findViewportHeightUnit('<p>İstanbul</p><div style="height:100vh"></div>'), '100vh')
+  assert.equal(findRootPercentHeight('<p>İstanbul</p><style>BODY { height: 100% }</style>'), 'height: 100%')
+
+  // <textarea> and <title> literal text is skipped, while opening-tag style= is still checked.
+  assert.equal(findViewportHeightUnit('<title><div style="height:100vh"></div></title><textarea><style>.x{height:100vh}</style></textarea>'), null)
+  assert.equal(findViewportHeightUnit('<textarea style="height: 80vh">ok</textarea>'), '80vh')
+
+  // Unary +, slash-delimited shorthand, and calc expressions are caught.
+  assert.equal(findViewportHeightUnit('<style>.a{height:+100vh}</style>'), '+100vh')
+  assert.equal(findViewportHeightUnit('<style>.a{font:14px/100vh sans-serif}</style>'), '100vh')
+  assert.equal(findViewportHeightUnit('<style>.a{height:-50svh}</style>'), '-50svh')
+
+  // Grouped :where/:is root selectors, nested @media / &, and spaced ! important are caught.
+  assert.equal(findRootPercentHeight('<style>:where(html, body) { height: 100%; }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>:is(html, .card) { min-height: 100% ! important; }</style>'), 'min-height: 100%')
+  assert.equal(findRootPercentHeight('<style>body { @media screen { height: 100%; } }</style>'), 'height: 100%')
+  assert.equal(findRootPercentHeight('<style>body { &:hover { height: 100%; } }</style>'), 'height: 100%')
+
+  // Qualified pseudo-elements and :not(body) must NOT be falsely rejected.
+  assert.equal(findRootPercentHeight('<style>body.has-hero::before { height: 100%; }</style>'), null)
+  assert.equal(findRootPercentHeight('<style>body:after { height: 100%; }</style>'), null)
+  assert.equal(findRootPercentHeight('<style>:not(body) { height: 100%; }</style>'), null)
+})
+
+test('historical accepted 100vh HTML cards still replay in ViewsTail while newly refused calls are excluded', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dv-replay-'))
+  t.after(() => rmSync(home, { recursive: true, force: true }))
+  const ctx = fakeContext()
+  apply(ctx, { home })
+  const tool = ctx.registeredTools.get('show_view')
+  const legacyHtml = { type: 'html', html: '<div style="height:100vh">Legacy chart</div>', summary: 'Legacy chart' }
+
+  // New host tool call rejects 100vh and marks presentationMeta as rejected.
+  const refusedText = await tool.execute({ title: 'New', view: legacyHtml }, { agent: { id: 'a1', session: { id: 's1' } } })
+  assert.match(refusedText, /viewport height unit "100vh" is not allowed/i)
+  assert.deepEqual(tool.output.presentationMeta({ view: legacyHtml }, refusedText), { owner: 'deep-view', rejected: true })
+  assert.deepEqual(tool.output.presentationMeta({ view: legacyHtml }, 'The view is on screen.'), { owner: 'deep-view' })
+
+  // viewsDefinition keeps a pre-upgrade accepted call and drops a post-upgrade rejected call.
+  const events = [
+    { type: 'turn/start', seq: 1, data: { turn: 1 } },
+    { type: 'tool/call', seq: 2, data: { turn: 1, step: 1, callId: 'legacy-1', name: 'show_view', arguments: JSON.stringify({ title: 'Old Chart', view: legacyHtml }) } },
+    { type: 'tool/result', seq: 3, data: { turn: 1, step: 1, meta: { owner: 'deep-view' }, message: { source: { callId: 'legacy-1' }, content: [{ type: 'text', text: 'The view is on screen.' }] } } },
+    { type: 'tool/call', seq: 4, data: { turn: 1, step: 2, callId: 'refused-2', name: 'show_view', arguments: JSON.stringify({ title: 'Refused Chart', view: legacyHtml }) } },
+    { type: 'tool/result', seq: 5, data: { turn: 1, step: 2, meta: { owner: 'deep-view', rejected: true }, message: { source: { callId: 'refused-2' }, content: [{ type: 'text', text: refusedText }] } } },
+  ]
+  let state
+  for (const event of events) {
+    const matched = viewsDefinition.match(event)
+    if (matched.role === 'start') state = viewsDefinition.start({ state }, { event, role: 'start' })
+    else state = viewsDefinition.update({ state }, { event, role: 'update' })
+  }
+  const turnData = viewsDefinition.buildLocationData({ state }, 'turn', null)
+  assert.deepEqual(turnData.value.views.map(v => v.callId), ['legacy-1'])
+
+  // ViewsTail renders the historical accepted card instead of hiding it.
+  const turn = {
+    data: {
+      get: key => (key === 'deep-view-views' ? turnData.value : undefined),
+      source: () => ({ getSnapshot: () => turnData.value, subscribe: () => () => {} }),
+    },
+  }
+  const box = document.createElement('div')
+  document.body.appendChild(box)
+  const root = createRoot(box)
+  try {
+    await act(async () => {
+      root.render(h(ViewUi.Provider, { value: ui }, h(ViewsTail, { turn, sessionId: 's1', useConversation: () => undefined })))
+    })
+    assert.ok(box.querySelector('iframe.dv-view-frame'), 'historical 100vh card must still render on replay')
+  } finally {
+    await act(async () => { root.unmount(); box.remove() })
+  }
+})
+
+test('HTML_CSS keeps fallback rules separate from :popover-open and HtmlFrame handles async toggle height lock, dialog semantics, focus restore, and listener cleanup', async () => {
+  // No comma-separated CSS rule may mix :popover-open with non-popover selectors.
+  for (const rule of HTML_CSS.split('}')) {
+    const brace = rule.indexOf('{')
+    if (brace === -1) continue
+    const selector = rule.slice(0, brace)
+    if (selector.includes(':popover-open')) {
+      assert.equal(selector.includes(','), false, `selector mixing :popover-open in a comma list breaks non-popover browsers: ${selector}`)
+    }
+  }
+  assert.match(HTML_CSS, /\.dv-view-frame-box\.dv-view-frame-box--fallback\{[^}]*position:fixed/)
+  assert.match(HTML_CSS, /\.dv-view-frame-box\.dv-view-frame-box--fallback \.dv-view-frame\{[^}]*height:100%/)
+
+  // Verify reference-counted host input listeners are removed on last unmount.
+  const added = []
+  const removed = []
+  const origAdd = window.addEventListener.bind(window)
+  const origRemove = window.removeEventListener.bind(window)
+  window.addEventListener = (type, fn, opts) => { added.push(type); return origAdd(type, fn, opts) }
+  window.removeEventListener = (type, fn, opts) => { removed.push(type); return origRemove(type, fn, opts) }
+
+  try {
+    const a = await renderFrame({ type: 'html', html: '<p>a</p>', summary: 'A', height: 180 })
+    const b = await renderFrame({ type: 'html', html: '<p>b</p>', summary: 'B', height: 180 })
+    assert.equal(added.filter(t => t === 'pointerdown').length, 1, 'host input listeners attached once across frames')
+    await a.unmount()
+    assert.equal(removed.filter(t => t === 'pointerdown').length, 0, 'listeners stay active while another frame is mounted')
+    await b.unmount()
+    assert.equal(removed.filter(t => t === 'pointerdown').length, 1, 'listeners removed after last frame unmounts')
+  } finally {
+    window.addEventListener = origAdd
+    window.removeEventListener = origRemove
+  }
+
+  // Test native popover: delayed toggle height lock, dialog role suppressing useOptionKeys,
+  // focus restore on native Escape/light-dismiss, and popover fallback when showPopover throws.
+  const proto = HTMLElement.prototype
+  let popoverOpen = false
+  let pendingToggle = null
+  let shouldThrow = false
+  const origMatches = proto.matches
+  Object.defineProperty(proto, 'popover', { configurable: true, writable: true, value: null })
+  Object.defineProperty(proto, 'showPopover', {
+    configurable: true,
+    value() {
+      if (shouldThrow) throw new Error('blocked')
+      popoverOpen = true
+      pendingToggle = () => {
+        const ev = new Event('toggle')
+        ev.newState = 'open'
+        this.dispatchEvent(ev)
+      }
+    },
+  })
+  Object.defineProperty(proto, 'hidePopover', {
+    configurable: true,
+    value() {
+      popoverOpen = false
+      const ev = new Event('toggle')
+      ev.newState = 'closed'
+      this.dispatchEvent(ev)
+    },
+  })
+  proto.matches = function matches(selector) {
+    if (selector === ':popover-open') return popoverOpen
+    return origMatches.call(this, selector)
+  }
+
+  const picks = []
+  const ownRef = { current: null }
+  const HostWithKeys = ({ node }) => {
+    useOptionKeys(2, idx => picks.push(idx), ownRef)
+    return h(HtmlFrame, { node })
+  }
+
+  const box = document.createElement('div')
+  document.body.appendChild(box)
+  const root = createRoot(box)
+  try {
+    await act(async () => {
+      root.render(h(ViewUi.Provider, { value: ui }, h(HostWithKeys, { node: { type: 'html', html: '<p>top</p>', summary: 'Top', height: 210 } })))
+    })
+    const frameBox = box.querySelector('.dv-view-frame-box')
+    const iframe = box.querySelector('iframe.dv-view-frame')
+
+    // Click fullscreen: showPopover() runs synchronously, toggle fires asynchronously later.
+    await act(async () => { box.querySelector('button.dv-view-frame-expand').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    // Resize arriving BEFORE async toggle must NOT clobber the locked inline height (210px).
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: iframe.contentWindow,
+        data: { type: 'dv-view-height', height: 950 },
+      }))
+    })
+    assert.equal(box.querySelector('.dv-view-frame-slot').style.height, '210px')
+
+    // Now fire async toggle('open').
+    await act(async () => { pendingToggle?.() })
+    assert.equal(frameBox.getAttribute('role'), 'dialog')
+    assert.equal(frameBox.getAttribute('aria-modal'), 'true')
+    assert.equal(frameBox.getAttribute('aria-label'), 'Top')
+
+    // While dialog is open, useOptionKeys must stay quiet on bare letter keys.
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', bubbles: true })) })
+    assert.deepEqual(picks, [])
+
+    // Simulate browser-native Escape / light-dismiss (fires toggle closed directly without clicking Close).
+    popoverOpen = false
+    await act(async () => {
+      const ev = new Event('toggle')
+      ev.newState = 'closed'
+      frameBox.dispatchEvent(ev)
+    })
+    assert.equal(frameBox.getAttribute('role'), null)
+    assert.equal(document.activeElement, box.querySelector('button.dv-view-frame-expand'), 'native Escape/light-dismiss must restore focus to expand button')
+
+    // If showPopover() throws on a popover-capable browser, fallback removes popover attr so box stays visible.
+    shouldThrow = true
+    await act(async () => { box.querySelector('button.dv-view-frame-expand').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    assert.equal(frameBox.classList.contains('dv-view-frame-box--fallback'), true)
+    assert.equal(frameBox.hasAttribute('popover'), false, 'fallback mode must omit popover attr so UA popover rules cannot hide it')
+  } finally {
+    await act(async () => { root.unmount(); box.remove() })
+    delete proto.popover
+    delete proto.showPopover
+    delete proto.hidePopover
+    proto.matches = origMatches
   }
 })

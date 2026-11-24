@@ -12,12 +12,18 @@ import { createPendingStore } from './pending.js'
 
 export const ROUTE = '/api/deep-view'
 
+const SHOWN_PREFIX = 'The view is on screen'
+
 const output = {
   schema: { type: 'string' },
   render: (args, value) => [{ type: 'text', text: String(value) }],
   // Marks the result so the client only draws the calls this plugin answered:
   // a session where another plugin's scoped show_view ran has no marker.
-  presentationMeta: () => ({ owner: 'deep-view' }),
+  // Refused calls carry `rejected: true` so the client skips them while still
+  // replaying pre-upgrade accepted views that used now-disallowed HTML CSS.
+  presentationMeta: (_args, value) => (String(value ?? '').startsWith(SHOWN_PREFIX)
+    ? { owner: 'deep-view' }
+    : { owner: 'deep-view', rejected: true }),
 }
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)

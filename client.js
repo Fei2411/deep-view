@@ -449,12 +449,12 @@ function normalizeView(value, inFormFields = false) {
   if (Array.isArray(out.values)) out.values = out.values.map(numeric);
   return out;
 }
-function validateView(view) {
-  const ctx = { ids: /* @__PURE__ */ new Set(), nodes: 0, interactive: false, inputs: /* @__PURE__ */ new Map(), lets: /* @__PURE__ */ new Map(), formulas: [] };
+function validateView(view, { strictHtmlSizing = true } = {}) {
+  const ctx = { ids: /* @__PURE__ */ new Set(), nodes: 0, interactive: false, inputs: /* @__PURE__ */ new Map(), lets: /* @__PURE__ */ new Map(), formulas: [], strictHtmlSizing };
   const error = checkNode(view, "view", 1, ctx) ?? checkFormulas(ctx);
   return error === void 0 ? { ok: true, interactive: ctx.interactive } : { ok: false, error };
 }
-function checkShownView(title, sent) {
+function checkShownView(title, sent, options = {}) {
   let bytes;
   try {
     bytes = viewBytes(title, sent);
@@ -465,7 +465,7 @@ function checkShownView(title, sent) {
   if (title !== void 0 && title !== null && typeof title !== "string") return { error: "title: expected a string" };
   const named = String(title ?? "").trim();
   const view = normalizeView(sent);
-  const checked = validateView(view);
+  const checked = validateView(view, options);
   if (!checked.ok) return { error: checked.error };
   return { title: named, view, interactive: checked.interactive };
 }
@@ -501,7 +501,7 @@ function checkNode(node, path, depth, ctx) {
     case "sources":
       return checkSources(node, path);
     case "html":
-      return checkHtml(node, path);
+      return checkHtml(node, path, ctx);
     case "slider":
     case "number":
       return checkNumberInput(node, path, ctx);
@@ -650,16 +650,18 @@ function checkSources(node, path) {
   }
   return void 0;
 }
-var VIEWPORT_HEIGHT_UNIT = /(?<![\w.+/-])(?:-?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i;
+var VIEWPORT_HEIGHT_UNIT = /(?<![\w.-])(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+)[sld]?vh)(?![\w-])/i;
 var ROOT_PERCENT_VALUE = /^100(?:\.0+)?%$/;
-var ROOT_SELECTOR_SUBJECT = /^(?:html|body|:root)(?:(?:\.|#|:[^:])[^\s>+~]*)?$/i;
 var SKIP_AT_RULE = /^@(?:(?:-webkit-|-moz-)?keyframes|font-face|page)\b/i;
+var LEGACY_PSEUDO_ELEMENTS = /* @__PURE__ */ new Set(["before", "after", "first-line", "first-letter"]);
+var RAW_TEXT_TAGS = /* @__PURE__ */ new Set(["style", "script", "textarea", "title"]);
 var isAsciiSpace = (code) => code === 32 || code === 9 || code === 10 || code === 12 || code === 13;
 var isTagNameChar = (code) => code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45 || code === 58;
 var isIdentChar = (code) => code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45 || code === 95;
+var asciiLower = (text) => text.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
 function extractHtmlCss(html) {
   const parts = [];
-  const lower = html.toLowerCase();
+  const lower = asciiLower(html);
   const len = html.length;
   let i = 0;
   while (i < len) {
@@ -734,7 +736,7 @@ function extractHtmlCss(html) {
       }
       if (attr === "style" && value) parts.push({ css: value, isStyleBlock: false, isRootElement: isRoot });
     }
-    if ((tag === "style" || tag === "script") && !selfClosing) {
+    if (RAW_TEXT_TAGS.has(tag) && !selfClosing) {
       const bodyStart = p;
       const closeTag = `</${tag}`;
       let closeAt = -1;
@@ -791,7 +793,7 @@ function stripCssNoise(css) {
       }
       continue;
     }
-    if ((ch === 117 || ch === 85) && i + 3 < len && css.slice(i, i + 4).toLowerCase() === "url(" && (i === 0 || !isIdentChar(css.charCodeAt(i - 1)))) {
+    if ((ch === 117 || ch === 85) && i + 3 < len && asciiLower(css.slice(i, i + 4)) === "url(" && (i === 0 || !isIdentChar(css.charCodeAt(i - 1)))) {
       let j = i + 4;
       while (j < len && isAsciiSpace(css.charCodeAt(j))) j += 1;
       if (j < len && css.charCodeAt(j) !== 34 && css.charCodeAt(j) !== 39) {
@@ -829,20 +831,116 @@ function findPercentHeightDecl(declarations) {
   for (const decl of declarations.split(";")) {
     const colon = decl.indexOf(":");
     if (colon === -1) continue;
-    const prop = decl.slice(0, colon).trim().toLowerCase();
+    const prop = asciiLower(decl.slice(0, colon).trim());
     if (prop !== "height" && prop !== "min-height") continue;
-    const val = decl.slice(colon + 1).replace(/!important\s*$/i, "").trim();
+    const val = decl.slice(colon + 1).replace(/!\s*important\s*$/i, "").trim();
     if (ROOT_PERCENT_VALUE.test(val)) return `${prop}: ${val}`;
   }
   return null;
 }
-function selectorTargetsRoot(selectorList) {
-  for (const raw of selectorList.split(",")) {
-    const sel = raw.trim();
-    if (!sel) continue;
-    const tokens = sel.replace(/\[[^\]]*\]/g, "").split(/[\s>+~]+/).filter(Boolean);
-    const subject = tokens.at(-1) ?? "";
-    if (ROOT_SELECTOR_SUBJECT.test(subject)) return true;
+function splitTopLevelCommas(selectorList) {
+  const items = [];
+  let paren = 0;
+  let bracket = 0;
+  let start = 0;
+  for (let i = 0; i < selectorList.length; i += 1) {
+    const ch = selectorList.charCodeAt(i);
+    if (ch === 40) paren += 1;
+    else if (ch === 41 && paren > 0) paren -= 1;
+    else if (ch === 91) bracket += 1;
+    else if (ch === 93 && bracket > 0) bracket -= 1;
+    else if (ch === 44 && paren === 0 && bracket === 0) {
+      items.push(selectorList.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  items.push(selectorList.slice(start).trim());
+  return items.filter(Boolean);
+}
+function extractSubjectCompound(selector) {
+  let paren = 0;
+  let bracket = 0;
+  let lastSplit = -1;
+  for (let i = 0; i < selector.length; i += 1) {
+    const ch = selector.charCodeAt(i);
+    if (ch === 40) paren += 1;
+    else if (ch === 41 && paren > 0) paren -= 1;
+    else if (ch === 91) bracket += 1;
+    else if (ch === 93 && bracket > 0) bracket -= 1;
+    else if (paren === 0 && bracket === 0 && (isAsciiSpace(ch) || ch === 62 || ch === 43 || ch === 126)) {
+      lastSplit = i;
+    }
+  }
+  return selector.slice(lastSplit + 1).trim();
+}
+function compoundTargetsRoot(compound, { parentTargetsRoot = false } = {}) {
+  if (compound === "") return false;
+  const len = compound.length;
+  let i = 0;
+  let hitsRoot = false;
+  while (i < len) {
+    const ch = compound.charCodeAt(i);
+    if (ch === 91) {
+      i += 1;
+      while (i < len && compound.charCodeAt(i) !== 93) i += 1;
+      if (i < len) i += 1;
+      continue;
+    }
+    if (ch === 46 || ch === 35) {
+      i += 1;
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
+      continue;
+    }
+    if (ch === 38) {
+      if (parentTargetsRoot) hitsRoot = true;
+      i += 1;
+      continue;
+    }
+    if (ch === 42) {
+      i += 1;
+      continue;
+    }
+    if (ch === 58) {
+      const doubleColon = i + 1 < len && compound.charCodeAt(i + 1) === 58;
+      i += doubleColon ? 2 : 1;
+      const nameStart = i;
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
+      const name = asciiLower(compound.slice(nameStart, i));
+      if (doubleColon || LEGACY_PSEUDO_ELEMENTS.has(name)) return false;
+      if (i < len && compound.charCodeAt(i) === 40) {
+        const argStart = i + 1;
+        let depth = 1;
+        i += 1;
+        while (i < len && depth > 0) {
+          const c = compound.charCodeAt(i);
+          if (c === 40) depth += 1;
+          else if (c === 41) depth -= 1;
+          i += 1;
+        }
+        const inner = compound.slice(argStart, depth === 0 ? i - 1 : i);
+        if ((name === "is" || name === "where") && selectorTargetsRoot(inner, { parentTargetsRoot })) {
+          hitsRoot = true;
+        }
+      } else if (name === "root") {
+        hitsRoot = true;
+      }
+      continue;
+    }
+    if (isIdentChar(ch)) {
+      const start = i;
+      while (i < len && isIdentChar(compound.charCodeAt(i))) i += 1;
+      const name = asciiLower(compound.slice(start, i));
+      if (start === 0 && (name === "html" || name === "body")) hitsRoot = true;
+      continue;
+    }
+    i += 1;
+  }
+  return hitsRoot;
+}
+function selectorTargetsRoot(selectorList, { parentTargetsRoot = false } = {}) {
+  for (const sel of splitTopLevelCommas(selectorList)) {
+    const subject = extractSubjectCompound(sel);
+    if (compoundTargetsRoot(subject, { parentTargetsRoot })) return true;
   }
   return false;
 }
@@ -856,16 +954,22 @@ function findRootPercentInStyleBlock(cleanCss) {
       const prelude = buf.trim();
       buf = "";
       if (top?.kind === "skip") stack.push({ kind: "skip", targetsRoot: false });
-      else if (prelude.startsWith("@")) stack.push({ kind: SKIP_AT_RULE.test(prelude) ? "skip" : "at", targetsRoot: false });
-      else stack.push({ kind: "rule", targetsRoot: top?.kind === "rule" ? false : selectorTargetsRoot(prelude) });
+      else if (prelude.startsWith("@")) {
+        const skip = SKIP_AT_RULE.test(prelude);
+        stack.push({ kind: skip ? "skip" : "at", targetsRoot: skip ? false : top?.targetsRoot === true });
+      } else {
+        const inRule = top?.kind === "rule" || top?.kind === "at" && top.targetsRoot === true;
+        const targetsRoot = inRule ? selectorTargetsRoot(prelude, { parentTargetsRoot: top?.targetsRoot === true }) : selectorTargetsRoot(prelude);
+        stack.push({ kind: "rule", targetsRoot });
+      }
     } else if (ch === ";") {
-      if (top?.kind === "rule" && top.targetsRoot) {
+      if (top?.targetsRoot) {
         const hit = findPercentHeightDecl(buf);
         if (hit !== null) return hit;
       }
       buf = "";
     } else if (ch === "}") {
-      if (top?.kind === "rule" && top.targetsRoot) {
+      if (top?.targetsRoot) {
         const hit = findPercentHeightDecl(buf);
         if (hit !== null) return hit;
       }
@@ -886,12 +990,14 @@ function findRootPercentHeight(html) {
   }
   return null;
 }
-function checkHtml(node, path) {
+function checkHtml(node, path, ctx) {
   if (typeof node.html !== "string" || node.html.trim() === "") return `${path}.html: expected a non-empty string`;
-  const vh = findViewportHeightUnit(node.html);
-  if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
-  const rootPct = findRootPercentHeight(node.html);
-  if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
+  if (ctx?.strictHtmlSizing !== false) {
+    const vh = findViewportHeightUnit(node.html);
+    if (vh !== null) return `${path}.html: viewport height unit ${quoted(vh)} is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
+    const rootPct = findRootPercentHeight(node.html);
+    if (rootPct !== null) return `${path}.html: ${quoted(rootPct)} on html/body is not allowed inside a self-sizing view; use fixed px heights or let content size naturally`;
+  }
   if (typeof node.summary !== "string" || node.summary.trim() === "") return `${path}.summary: expected one line that says what the view shows`;
   if (node.height !== void 0 && (!isNumber(node.height) || node.height <= 0)) return `${path}.height: expected a positive number of pixels`;
   return void 0;
@@ -1717,22 +1823,37 @@ var supportsPopover = () => typeof HTMLElement !== "undefined" && "popover" in H
 var clampHeight = (value) => Math.min(MAX_FIT_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(value)));
 var HOST_INPUT_EVENTS = ["pointerdown", "pointerup", "touchend", "keydown"];
 var lastHostInputAt = -Infinity;
-var hostInputTracking = false;
+var hostInputRefCount = 0;
+var hostInputListener = null;
 var nowMs = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 function recordHostInput(now = nowMs()) {
+  if (!Number.isFinite(now)) return;
   lastHostInputAt = now;
 }
 function resetHostInputForTest() {
   lastHostInputAt = -Infinity;
 }
-function ensureHostInputTracking() {
-  if (hostInputTracking || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
-  hostInputTracking = true;
-  const onInput = () => recordHostInput();
-  for (const type of HOST_INPUT_EVENTS) window.addEventListener(type, onInput, { capture: true, passive: true });
+function acquireHostInputTracking() {
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return () => {
+  };
+  if (hostInputRefCount === 0) {
+    hostInputListener = () => recordHostInput();
+    for (const type of HOST_INPUT_EVENTS) window.addEventListener(type, hostInputListener, { capture: true, passive: true });
+  }
+  hostInputRefCount += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    hostInputRefCount = Math.max(0, hostInputRefCount - 1);
+    if (hostInputRefCount === 0 && hostInputListener !== null) {
+      for (const type of HOST_INPUT_EVENTS) window.removeEventListener(type, hostInputListener, { capture: true });
+      hostInputListener = null;
+    }
+  };
 }
 function canIframeRequestFullscreen(iframeEl, now = nowMs()) {
-  if (!iframeEl || typeof document === "undefined" || typeof navigator === "undefined") return false;
+  if (!iframeEl || !Number.isFinite(now) || typeof document === "undefined" || typeof navigator === "undefined") return false;
   if (document.activeElement !== iframeEl) return false;
   if (navigator.userActivation?.isActive !== true) return false;
   return now - lastHostInputAt >= PAGE_ACTIVATION_MS;
@@ -1779,7 +1900,9 @@ function HtmlFrame({ node }) {
   const frame = (0, import_react3.useRef)(null);
   const boxRef = (0, import_react3.useRef)(null);
   const expandBtnRef = (0, import_react3.useRef)(null);
+  const closeBtnRef = (0, import_react3.useRef)(null);
   const restoreFocusRef = (0, import_react3.useRef)(false);
+  const rethemeRef = (0, import_react3.useRef)(null);
   const loads = (0, import_react3.useRef)(0);
   const fullscreenRef = (0, import_react3.useRef)(false);
   const [height, setHeight] = (0, import_react3.useState)(() => clampHeight(Number.isFinite(node.height) ? node.height : 120));
@@ -1789,12 +1912,18 @@ function HtmlFrame({ node }) {
   const [stopped, setStopped] = (0, import_react3.useState)(false);
   const popover = supportsPopover();
   const doc = (0, import_react3.useMemo)(() => frameDocument(String(node.html ?? ""), themeVars()), [node.html]);
-  fullscreenRef.current = fullscreen;
+  const isPopoverOpen = () => {
+    try {
+      return Boolean(popover && boxRef.current?.matches?.(":popover-open"));
+    } catch {
+      return false;
+    }
+  };
   (0, import_react3.useEffect)(() => {
-    ensureHostInputTracking();
+    const releaseHostInput = acquireHostInputTracking();
     const onMessage = (event) => {
       if (event.source !== frame.current?.contentWindow || event.data?.type !== HEIGHT) return;
-      if (fullscreenRef.current) return;
+      if (fullscreenRef.current || isPopoverOpen()) return;
       const next = Number(event.data.height);
       if (Number.isFinite(next)) setHeight(clampHeight(next));
     };
@@ -1804,21 +1933,26 @@ function HtmlFrame({ node }) {
       if (vars["color-scheme"]) setScheme(vars["color-scheme"]);
       frame.current?.contentWindow?.postMessage({ type: THEME, vars }, "*");
     };
+    rethemeRef.current = retheme;
     const observer = typeof MutationObserver === "function" ? new MutationObserver(retheme) : null;
     if (observer) {
       if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme", "style", "class"] });
       if (document.documentElement) observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
     }
     return () => {
+      rethemeRef.current = null;
       window.removeEventListener("message", onMessage);
       observer?.disconnect();
+      releaseHostInput();
     };
-  }, []);
+  }, [popover]);
   (0, import_react3.useEffect)(() => {
     const box = boxRef.current;
-    if (!popover || !box) return void 0;
+    if (!popover || !box || stopped) return void 0;
     const onToggle = (event) => {
       const open = event.newState === "open";
+      if (!open && fullscreenRef.current) restoreFocusRef.current = true;
+      fullscreenRef.current = open;
       setFullscreen(open);
       if (!open) setFallbackFull(false);
     };
@@ -1826,26 +1960,30 @@ function HtmlFrame({ node }) {
     return () => box.removeEventListener("toggle", onToggle);
   }, [popover, stopped]);
   (0, import_react3.useEffect)(() => {
-    if (!fallbackFull) return void 0;
+    if (!fallbackFull || stopped) return void 0;
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         restoreFocusRef.current = true;
+        fullscreenRef.current = false;
         setFallbackFull(false);
         setFullscreen(false);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [fallbackFull]);
+  }, [fallbackFull, stopped]);
   (0, import_react3.useEffect)(() => {
-    if (!fullscreen && restoreFocusRef.current) {
+    if (fullscreen) {
+      closeBtnRef.current?.focus?.({ preventScroll: true });
+    } else if (restoreFocusRef.current) {
       restoreFocusRef.current = false;
       expandBtnRef.current?.focus?.();
     }
   }, [fullscreen]);
   const enterFullscreen = () => {
     const box = boxRef.current;
+    fullscreenRef.current = true;
     if (popover && typeof box?.showPopover === "function") {
       try {
         box.showPopover();
@@ -1868,6 +2006,7 @@ function HtmlFrame({ node }) {
       } catch {
       }
     }
+    fullscreenRef.current = false;
     setFallbackFull(false);
     setFullscreen(false);
   };
@@ -1882,7 +2021,10 @@ function HtmlFrame({ node }) {
       "div",
       {
         ref: boxRef,
-        popover: popover ? "auto" : void 0,
+        popover: popover && !fallbackFull ? "auto" : void 0,
+        role: fullscreen ? "dialog" : void 0,
+        "aria-modal": fullscreen ? "true" : void 0,
+        "aria-label": fullscreen ? label : void 0,
         "data-dv-fullscreen": fullscreen ? "" : void 0,
         className: boxClass
       },
@@ -1893,6 +2035,7 @@ function HtmlFrame({ node }) {
           (0, import_react3.createElement)("span", { key: "title", className: "dv-view-frame-title" }, label),
           (0, import_react3.createElement)("button", {
             key: "close",
+            ref: closeBtnRef,
             type: "button",
             className: "dv-view-frame-btn",
             "aria-label": ui.t("Exit fullscreen"),
@@ -1919,7 +2062,18 @@ function HtmlFrame({ node }) {
         style: { height: fullscreen ? void 0 : `${height}px`, colorScheme: scheme },
         onLoad: () => {
           loads.current += 1;
-          if (loads.current > 1) setStopped(true);
+          if (loads.current === 1) {
+            rethemeRef.current?.();
+          } else if (loads.current > 1) {
+            try {
+              if (boxRef.current?.matches?.(":popover-open")) boxRef.current.hidePopover();
+            } catch {
+            }
+            fullscreenRef.current = false;
+            setFallbackFull(false);
+            setFullscreen(false);
+            setStopped(true);
+          }
         }
       })
     )
@@ -1927,9 +2081,10 @@ function HtmlFrame({ node }) {
 }
 var HTML_CSS = `
 .dv-view-frame-slot{position:relative;width:100%}
-.dv-view-frame-box,.dv-view-frame-box[popover]:not(:popover-open){position:relative;display:flex;flex-direction:column;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;inset:auto;overflow:visible}
-.dv-view-frame-box:popover-open,.dv-view-frame-box--fallback{position:fixed;inset:16px;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;display:flex;flex-direction:column;border-radius:16px;border:1px solid var(--dv-line-2);background:var(--dv-card);color:var(--dv-ink);box-shadow:0 20px 50px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:9999;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
-.dv-view-frame-box--fallback{inset:0;border:0;border-radius:0}
+.dv-view-frame-box{position:relative;display:flex;flex-direction:column;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;inset:auto;overflow:visible}
+.dv-view-frame-box[popover]:not(:popover-open){position:relative;display:flex;flex-direction:column;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;color:inherit;inset:auto;overflow:visible}
+.dv-view-frame-box:popover-open{position:fixed;inset:16px;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;display:flex;flex-direction:column;border-radius:16px;border:1px solid var(--dv-line-2);background:var(--dv-card);color:var(--dv-ink);box-shadow:0 20px 50px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:9999;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
+.dv-view-frame-box.dv-view-frame-box--fallback{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;display:flex;flex-direction:column;border-radius:0;border:0;background:var(--dv-card);color:var(--dv-ink);box-shadow:0 20px 50px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:9999;font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif);box-sizing:border-box}
 .dv-view-frame-box::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
 .dv-view-frame-actions{position:absolute;top:8px;right:8px;z-index:2;opacity:.72;transition:opacity .12s ease;pointer-events:none}
 .dv-view:hover .dv-view-frame-actions,.dv-view-frame-slot:hover .dv-view-frame-actions,.dv-view-frame-actions:hover,.dv-view-frame-actions:focus-within{opacity:1}
@@ -1943,7 +2098,8 @@ var HTML_CSS = `
 .dv-view-frame-actions .dv-view-frame-btn{pointer-events:auto;background:color-mix(in srgb,var(--dv-card) 86%,transparent);border:.5px solid var(--dv-line-2);backdrop-filter:blur(6px);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .dv-view-frame-actions .dv-view-frame-btn:hover{background:var(--dv-card);color:var(--dv-ink)}
 .dv-view-frame{display:block;width:100%;border:0;background:transparent}
-.dv-view-frame-box:popover-open .dv-view-frame,.dv-view-frame-box--fallback .dv-view-frame{flex:1 1 auto;width:100%;height:100%;min-height:0}
+.dv-view-frame-box:popover-open .dv-view-frame{flex:1 1 auto;width:100%;height:100%;min-height:0}
+.dv-view-frame-box.dv-view-frame-box--fallback .dv-view-frame{flex:1 1 auto;width:100%;height:100%;min-height:0}
 .dv-view-frame-stopped{margin:0;font-size:13px;line-height:18px;color:var(--dv-ink-2)}
 @media (prefers-reduced-motion:reduce){.dv-view-frame-actions,.dv-view-frame-btn{transition:none}}
 `;
@@ -2717,8 +2873,7 @@ body{
 --dv-ink-rose:var(--dsw-alias-state-error-primary);
 --dv-ink-yellow:var(--dsw-alias-state-warn-label,var(--dsw-alias-state-warn-primary));
 --dv-ink-cyan:var(--dsw-alias-state-success-tertiary,var(--dsw-alias-state-success-primary));
---dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary));
-color-scheme:light}
+--dv-ink-magenta:var(--dsw-alias-state-error-secondary,var(--dsw-alias-state-error-primary))}
 body[data-ds-dark-theme],html.dark body,html[data-theme=dark] body{color-scheme:dark}
 .dv-q-inline .dv-view{max-width:100%}
 `;
@@ -2793,6 +2948,14 @@ button.dv-q-opt:active{background:var(--dv-active)}
 var DEEP_VIEW_CSS = THEME_CSS + QUESTION_CSS + WIDGET_CSS;
 
 // src/client/views-definition.js
+var SHOWN_PREFIX = "The view is on screen";
+function resultTextOf(message) {
+  if (typeof message?.text === "string") return message.text;
+  if (Array.isArray(message?.content)) {
+    return message.content.filter((block) => block?.type === "text").map((block) => block.text).join("");
+  }
+  return void 0;
+}
 var viewsDefinition = {
   kind: "deep-view-views",
   match(event) {
@@ -2822,7 +2985,9 @@ var viewsDefinition = {
       if (!state.calls.has(callId)) return state;
       const calls = new Map(state.calls);
       const mine = event.data?.meta?.owner === "deep-view";
-      calls.set(callId, { ...calls.get(callId), ok: mine && event.data.message?.isError !== true });
+      const text = resultTextOf(event.data?.message);
+      const accepted = event.data?.meta?.rejected !== true && (text === void 0 || text.startsWith(SHOWN_PREFIX));
+      calls.set(callId, { ...calls.get(callId), ok: mine && accepted && event.data.message?.isError !== true });
       return { ...state, calls };
     }
     return state;
@@ -2920,7 +3085,7 @@ var InteractiveView = ({ callId, sessionId, useConversation }) => {
   return (0, import_react5.createElement)("div", { className: "dv-q-inline" }, (0, import_react5.createElement)(WidgetCard, { title: record.title ?? "", view: record.view, onSubmit, onDismiss, busy: flying === true }));
 };
 var TailView = ({ call: call2, sessionId, useConversation }) => {
-  const shown = checkShownView(call2.args?.title, call2.args?.view);
+  const shown = checkShownView(call2.args?.title, call2.args?.view, { strictHtmlSizing: false });
   if (shown.error !== void 0) return null;
   if (!shown.interactive && call2.args?.await_reply === true) return null;
   if (shown.interactive && call2.args?.await_reply === false) return null;
